@@ -32,6 +32,30 @@ parser.add_argument('--gpu_number', type=str, default='-1', help='The gpu number
 
 args = parser.parse_args()
 
+script_folder = os.path.dirname(os.path.abspath(__file__))
+if not os.path.exists(args.positive_samples):
+    args.positive_samples = script_folder+'/data/positive_samples.txt'
+if not not_filter_false_positive:
+    if not os.path.exists(args.homo_genes):
+        args.homo_genes = script_folder+'/data/homo_gene.npy'
+        if not os.path.exists(args.homo_genes):
+            if os.path.exists(script_folder+'/data/homo_gene_1.txt.gz') and os.path.exists(script_folder+'/data/homo_gene_1.txt.gz'):
+                os.system('gzip -d '+ script_folder+'/data/homo_gene_1.txt.gz')
+                os.system('gzip -d '+ script_folder+'/data/homo_gene_2.txt.gz')
+            if os.path.exists(script_folder+'/data/homo_gene_1.txt') and os.path.exists(script_folder+'/data/homo_gene_1.txt'):
+                os.system('cat '+script_folder+'/data/homo_gene_1.txt '+script_folder+'/data/homo_gene_2.txt > '+script_folder+'/data/homo_gene.txt')
+            if os.path.exists(script_folder+'/data/homo_gene.txt'):
+                homo_genes = {}
+                F = open(script_folder+'/data/homo_gene.txt','r'):
+                gene_names = F.readlines()[0].split(';')
+                for line in F.readlines()[1:]:
+                    key,values = line.rstrip().split('\t')
+                    values = values.split(';')
+                    values = [int(v) for v in values]
+                    homo_genes[key] = values
+                np.save(script_folder+'/data/homo_gene.npy',homo_genes)
+                del homo_genes
+
 if args.out_name == '_':
     args.out_name = args.gene_name
 temp_folder = args.out_folder + "/work_dir/"
