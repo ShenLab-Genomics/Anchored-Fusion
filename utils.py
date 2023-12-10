@@ -15,21 +15,20 @@ class Gene_co():
                 continue
             arr = line.split('\t')
             if arr[2] == "exon":
-                tmp = re.findall(r'gene_id\s+"(ENSG\d+\S+)";\s+.+gene_type\s+"(\S+)";\s+gene_name\s+"(\S+)";\s+',
+                tmp = re.findall(r'gene_id\s+"(ENSG\d+\S+)";\s+.+gene_name\s+"(\S+)";\s+',
                                  arr[8])
                 if len(tmp) != 0:
                     gene_id = tmp[0][0]
-                    gene_type = tmp[0][1]
-                    gene_name = tmp[0][2]
+                    gene_name = tmp[0][1]
                     if arr[0] not in self.dic:
-                        self.dic[arr[0]] = [[int(arr[3]) - 100, int(arr[4]) + 100, gene_id, gene_name]]
+                        self.dic[arr[0]] = [[int(arr[3]), int(arr[4]), gene_id, gene_name]]
                     else:
-                        self.dic[arr[0]].append([int(arr[3]) - 100, int(arr[4]) + 100, gene_id, gene_name])
+                        self.dic[arr[0]].append([int(arr[3]), int(arr[4]), gene_id, gene_name])
         for key, value in self.dic.items():
             value.sort()
             i = 0
             while i < len(value) - 1:
-                if value[i][1] >= value[i + 1][0]:
+                if value[i][1] >= value[i + 1][0] and value[i][2] == value[i+1][2]:
                     if value[i][1] >= value[i + 1][1]:
                         del value[i + 1]
                     else:
@@ -39,17 +38,9 @@ class Gene_co():
                 i += 1
         return
 
-    def Find_gene(self, chrome, start, end):
+    def Find_exon(self, chrome, start, end):
         if chrome not in self.dic or chrome == 'chrM':
-            return ['', '', '', '', '']
-        if chrome == 'chr14' and 105586437 - 100 <= start and end <= 106879844 + 100:
-            return ['IGH@', 'IGH@', 'chr14', 105586337, 106879944]
-        elif chrome == 'chr14' and 21621904 - 100 <= start and end <= 22552232:
-            return ['TRA@', 'TRA@', 'chr14', 21621804, 22552332]
-        elif chrome == 'KI270846.1' and 0 <= start and end <= 1351393:
-            return ['IGH@', 'IGH@', 'KI270846.1', 0, 1351393]
-        if chrome not in self.dic or chrome == 'chrM':
-            return ['', '', '', '', '']
+            return ['', '', '', '', ''], -1
         chr_list = self.dic[chrome]
         l, r, m = 0, len(chr_list), 0
         while r - 1 > l:
@@ -59,14 +50,23 @@ class Gene_co():
             else:
                 r = m
         m = l
-        if chr_list[m][0] <= start and chr_list[m][1] >= end:
-            return [chr_list[m][2], chr_list[m][3], chrome, chr_list[m][0], chr_list[m][1]]
+        if chr_list[m][0] -10 <= start and chr_list[m][1] + 10 >= end :
+            return [chr_list[m][2], chr_list[m][3], chrome, chr_list[m][0], chr_list[m][1]],m
         else:
-            return ['', '', '', '', '']
-
+            m_new = m - 1
+            while m_new >= 0 and chr_list[m_new][0] - 10 <= start and chr_list[m_new][1] + 10 >= start:
+                if chr_list[m_new][1] + 10 >= end:
+                    return [chr_list[m_new][2], chr_list[m_new][3], chrome, chr_list[m_new][0], chr_list[m_new][1]],m_new
+                m_new -= 1
+            m_new = m + 1
+            while m_new < len(chr_list) and chr_list[m_new][0] - 10 <= start:
+                if chr_list[m_new][1] + 10 >= end:
+                    return [chr_list[m_new][2], chr_list[m_new][3], chrome, chr_list[m_new][0], chr_list[m_new][1]],m_new
+                m_new += 1
+            return ['', '', '', '', ''],-1
 
 class Block():
-    def __init__(self, chrom, start, end, gene):
+    def __init__(self, chrom, start, end, gene,exon_num):
         self.gene = gene
         self.bad = False
         self.chrom = chrom
@@ -75,6 +75,8 @@ class Block():
         self.anchored_split_breakpoints = set()
         self.count = 0
         self.reads = []
+        self.min_exon_num = exon_num
+        self.max_exon_num = exon_num
 
     def Add_spanning_reads(self, start, end,read):
         if start < self.start:
@@ -91,6 +93,10 @@ class Block():
             self.end = block.end
         self.count += block.count
         self.reads.extend(block.reads)
+        if self.min_exon_num > block.min_exon_num:
+            self.min_exon_num = block.min_exon_num
+        if self.max_exon_num < block.max_exon_num:
+            self.max_exon_num = block.max_exon_num
 
 class spanning_anchored():
     def __init__(self,type_,left_length,right_length,read_name):
@@ -355,7 +361,7 @@ def Find_blocks(f_read, gene_co, homo_genes):
         for index, c in enumerate(arr[5]):
             if c.isalpha():
                 if c == 'M':
-                    chrom, start, end = arr[2], int(arr[3]), int(arr[3]) + int(arr[5][letter_id + 1:index])
+                    chrom, start, end = arr[2], int(arr[3]), int(arr[3]) + int(arr[5][letter_id + 1:index]) - 1
                     break
                 letter_id = index
         return (read_name, chrom, start, end)
@@ -386,20 +392,20 @@ def Find_blocks(f_read, gene_co, homo_genes):
         gene_not_in_homo = -1
         gene_not_name = ''
         for k, pos in enumerate(poses):
-            gene = gene_co.Find_gene(pos[1], pos[2], pos[3])
+            gene,exon_num = gene_co.Find_exon(pos[1], pos[2], pos[3])
             if gene[0] in homo_genes:
                 gene_in_homo = k
             elif gene[0] != '':
                 if gene_not_in_homo == -1:
                     gene_not_in_homo = k
                     gene_not_name = gene
+                    gene_not_exon_num = exon_num
                 elif gene[0] != gene_not_name[0]:
                     gene_not_in_homo = -1
                     break
         if gene_in_homo == -1 or gene_not_in_homo == -1:
             continue
-        chrom, start, end, gene = poses[gene_not_in_homo][1], poses[gene_not_in_homo][2], poses[gene_not_in_homo][
-            3], gene_not_name
+        chrom, start, end, gene, exon_num = poses[gene_not_in_homo][1], poses[gene_not_in_homo][2], poses[gene_not_in_homo][3], gene_not_name,gene_not_exon_num
         if chrom not in blocks_chr:
             blocks_chr[chrom] = []
         blocks = blocks_chr[chrom]
@@ -409,27 +415,53 @@ def Find_blocks(f_read, gene_co, homo_genes):
                 i -= 1
             else:
                 break
-        if i >= 0 and blocks[i].end + 300 >= start and blocks[i].gene[0] == gene[0]:
-            blocks[i].Add_spanning_reads(start, end, poses[0][0])
+        if i >= 0 and blocks[i].gene[0] == gene[0]:
+            if blocks[i].min_exon_num<=exon_num<=blocks[i].max_exon_num or (start>=blocks[i].start and end <= blocks[i].end):
+                blocks[i].Add_spanning_reads(start, end, poses[0][0])
         else:
-            block = Block(chrom, start, end, gene)
+            block = Block(chrom, start, end, gene,exon_num)
             block.Add_spanning_reads(start, end, poses[0][0])
             if i != -1 and start < blocks[i].start:
                 blocks.insert(i, block)
             else:
                 blocks.insert(i + 1, block)
                 i += 1
-        while i < len(blocks) - 1 and blocks[i].gene[0] == blocks[i + 1].gene[0] and blocks[i].end + 300 >= blocks[
-            i + 1].start:
-            blocks[i].Add_block(blocks[i + 1])
-            del blocks[i + 1]
-        while i >= 1 and blocks[i].gene[0] == blocks[i - 1].gene[0] and blocks[i - 1].end >= blocks[i].start - 300:
-            blocks[i].Add_block(blocks[i - 1])
-            del blocks[i - 1]
+
+        while i < len(blocks) - 1 and blocks[i].gene[0] == blocks[i + 1].gene[0]:
+            if blocks[i+1].min_exon_num - blocks[i].max_exon_num <= 3:
+                blocks[i].Add_block(blocks[i + 1])
+                del blocks[i + 1]
+            else:
+                exon_num_now = blocks[i].max_exon_num + 1
+                length = 0
+                while exon_num_now < blocks[i+1].min_exon_num:
+                    if gene_co.dic[chrom][exon_num_now][2] == blocks[i].gene[0] and gene_co.dic[chrom][exon_num_now][0] > gene_co.dic[chrom][exon_num_now-1][1]:
+                        length += gene_co.dic[chrom][exon_num_now][1] - gene_co.dic[chrom][exon_num_now][0]
+                    exon_num_now += 1
+                if length <= 200:
+                    blocks[i].Add_block(blocks[i + 1])
+                    del blocks[i + 1]
+                else:
+                    break
+        while i >= 1 and blocks[i].gene[0] == blocks[i - 1].gene[0]:
+            if blocks[i].min_exon_num - blocks[i-1].max_exon_num <= 3:
+                blocks[i].Add_block(blocks[i - 1])
+                del blocks[i - 1]
+            else:
+                exon_num_now,length = blocks[i].min_exon_num - 1,0
+                while exon_num_now > blocks[i-1].max_exon_num:
+                    if gene_co.dic[chrom][exon_num_now][2] == blocks[i].gene[0] and gene_co.dic[chrom][exon_num_now][1] < gene_co.dic[chrom][exon_num_now+1][0]:
+                        length += gene_co.dic[chrom][exon_num_now][1] - gene_co.dic[chrom][exon_num_now][0]
+                    exon_num_now -= 1
+                if length <= 200:
+                    blocks[i].Add_block(blocks[i - 1])
+                    del blocks[i - 1]
+                else:
+                    break
             i -= 1
     for blocks in blocks_chr.values():
         for block in blocks:
-            block.start, block.end = max(block.gene[3], block.start - 300), min(block.gene[4], block.end + 300)
+            block.start, block.end = gene_co.dic[block.chrom][block.min_exon_num][0], gene_co.dic[block.chrom][block.max_exon_num][1]
     return blocks_chr
 
 def reverse(seq):
@@ -492,13 +524,13 @@ def Find_fine_block(f_read,file_ref_seq,work_dir,gene_co, homo_genes,block_chr):
                 blocks = []
             else:
                 for block in blocks:
-                    gene = gene_co.Find_gene(block[0],block[1],block[2])
+                    gene,exon_num = gene_co.Find_exon(block[0],block[1],block[2])
                     if gene[0] == '' or gene[0] in homo_genes:
                         continue
                     if block[0] not in block_chr:
-                        Block_now = Block(block[0],block[1],block[2],gene)
-                        Block_now.Add_spanning_reads(block[1], block[2],block[3])
-                        block_chr[block[0]] = [Block_now]
+                        block_now = Block(block[0],block[1],block[2],gene,exon_num)
+                        block_now.Add_spanning_reads(block[1], block[2],block[3])
+                        block_chr[block[0]] = [block_now]
                     else:
                         Block_now = block_chr[block[0]]
                         j = len(Block_now) - 1
@@ -507,22 +539,47 @@ def Find_fine_block(f_read,file_ref_seq,work_dir,gene_co, homo_genes,block_chr):
                                 j -= 1
                             else:
                                 break
-                        if j >= 0 and Block_now[j].end  >= block[1] and Block_now[j].gene[0] == gene[0]:
+                        if (j >= 0 and Block_now[j].gene[0] == gene[0]) and ((Block_now[j].start <= block[1] and Block_now[j].end >= block[2]) or Block_now[j].min_exon_num<=exon_num<=Block_now[j].max_exon_num):
                             Block_now[j].Add_spanning_reads(block[1], block[2], block[3])
                         else:
-                            block_now = Block(block[0],block[1],block[2],gene)
-                            block_now.Add_spanning_reads(block[1], block[2], block[3])
+                            block_now = Block(block[0],block[1],block[2], gene,exon_num)
+                            block_now.Add_spanning_reads(block[1], block[2],block[3])
                             if j != -1 and block[1] < Block_now[j].start:
                                 Block_now.insert(j, block_now)
                             else:
                                 Block_now.insert(j + 1, block_now)
                                 j += 1
-                        while j < len(Block_now) - 1 and Block_now[j].gene[0] == Block_now[j + 1].gene[0] and Block_now[j].end  >= Block_now[j + 1].start:
-                            Block_now[j].Add_block(Block_now[j + 1])
-                            del Block_now[j + 1]
-                        while j >= 1 and Block_now[j].gene[0] == Block_now[j - 1].gene[0] and Block_now[j - 1].end >= Block_now[j].start :
-                            Block_now[j].Add_block(Block_now[j - 1])
-                            del Block_now[j - 1]
+                        while j < len(Block_now) - 1 and Block_now[j].gene[0] == Block_now[j + 1].gene[0]:
+                            if Block_now[j+1].min_exon_num - Block_now[j].max_exon_num <= 3:
+                                Block_now[j].Add_block(Block_now[j + 1])
+                                del Block_now[j + 1]
+                            else:
+                                exon_num_now = Block_now[j].max_exon_num + 1
+                                length = 0
+                                while exon_num_now < Block_now[j+1].min_exon_num:
+                                    if gene_co.dic[block[0]][exon_num_now][2] == Block_now[j].gene[0] and gene_co.dic[block[0]][exon_num_now][0] > gene_co.dic[block[0]][exon_num_now-1][1]:
+                                        length += gene_co.dic[block[0]][exon_num_now][1] - gene_co.dic[block[0]][exon_num_now][0]
+                                    exon_num_now += 1
+                                if length <= 200:
+                                    Block_now[j].Add_block(Block_now[j + 1])
+                                    del Block_now[j + 1]
+                                else:
+                                    break
+                        while j >= 1 and Block_now[j].gene[0] == Block_now[j - 1].gene[0]:
+                            if Block_now[j].min_exon_num - Block_now[j-1].max_exon_num <= 3:
+                                Block_now[j].Add_block(Block_now[j - 1])
+                                del Block_now[j - 1]
+                            else:
+                                exon_num_now,length = Block_now[j].min_exon_num - 1,0
+                                while exon_num_now > Block_now[j-1].max_exon_num:
+                                    if gene_co.dic[block[0]][exon_num_now][2] == Block_now[j].gene[0] and gene_co.dic[block[0]][exon_num_now][1] < gene_co.dic[block[0]][exon_num_now+1][0]:
+                                        length += gene_co.dic[block[0]][exon_num_now][1] - gene_co.dic[block[0]][exon_num_now][0]
+                                    exon_num_now -= 1
+                                if length <= 200:
+                                    Block_now[j].Add_block(Block_now[j - 1])
+                                    del Block_now[j - 1]
+                                else:
+                                    break
                             j -= 1
                 blocks = []
         if bad_flag != 0:
@@ -538,7 +595,7 @@ def Find_fine_block(f_read,file_ref_seq,work_dir,gene_co, homo_genes,block_chr):
             elif candidates[now_id].left_length - 5 <= in_start <= candidates[now_id].left_length + 5 and in_end >= candidates[now_id].left_length + candidates[now_id].right_length  - 5:
                 blocks.append([chrom,start,end,candidates[now_id].read_name])
             elif in_start <= 5 and in_end <= candidates[now_id].left_length + 5:
-                gene = gene_co.Find_gene(chrom,start,end)
+                gene,_ = gene_co.Find_exon(chrom,start,end)
                 if gene[0] in homo_genes:
                     good_flag = 1
         elif candidates[now_id].type_ == "SM":
@@ -547,9 +604,15 @@ def Find_fine_block(f_read,file_ref_seq,work_dir,gene_co, homo_genes,block_chr):
             elif in_start < candidates[now_id].left_length - 5 and in_end >= candidates[now_id].left_length + candidates[now_id].right_length//2:
                 bad_flag = 1
             elif candidates[now_id].left_length - 5 <= in_start <= candidates[now_id].left_length + 5 and in_end >= candidates[now_id].left_length + candidates[now_id].right_length  - 5:
-                gene = gene_co.Find_gene(chrom,start,end)
+                gene,_ = gene_co.Find_exon(chrom,start,end)
                 if gene[0] in homo_genes:
                     good_flag = 1
+    
+    if os.path.exists(fa_reads):
+        os.remove(fa_reads)
+    if os.path.exists(f_tmp_blat):
+        os.remove(f_tmp_blat)
+    
     return block_chr
 
 def deal_cigar(cigar, seq):
@@ -628,8 +691,6 @@ def del_too_many_reads(f_read,out_sam, work_dir, f_ref, thread):
         if int(arr[1]) > 15 and bin(int(arr[1]))[-5] == '1':
             arr[9] = reverse(arr[9])
         now_name,now_seq = arr[0],arr[9]
-        if now_name.find('SRR8616157.67784184')!=-1:
-            print('lalala')
         if now_name != last_name:
             if bad_flag == 0 and last_name != '':
                 arr_name = last_name.split('$')
@@ -655,13 +716,17 @@ def del_too_many_reads(f_read,out_sam, work_dir, f_ref, thread):
                         for m in cigar_now:
                             if m[2] == 'M' and m[0]-m[1] < mb[0]- mb[1]*0.2 and m[0] > mb[0]+mb[1] * 0.2:
                                 bad_flag = 1
+        if i == len(lines) - 1:
+            if bad_flag == 0 and last_name != '':
+                arr_name = last_name.split('$')
+                FO.write(arr_name[0]+'\t0\t'+arr_name[1]+'\t'+arr_name[2]+'\t60\t'+arr_name[3]+'\t=\t1111\t0\t'+last_seq+'\tA\n')
         i += 1
     FS.close()
     FO.close()
-    #if os.path.exists(tmp_fa):
-        #os.remove(tmp_fa)
-    #if os.path.exists(tmp_sam):
-        #os.remove(tmp_sam)
+    if os.path.exists(tmp_fa):
+        os.remove(tmp_fa)
+    if os.path.exists(tmp_sam):
+        os.remove(tmp_sam)
     return
 
 
@@ -824,7 +889,7 @@ def contact_reads(f_read, work_dir, f_ref, thread):
             type_ = 'MS'
             if cigar_list[1][0] < 15:
                 continue
-            breakpointnow = int(start) + cigar_list[0][1]
+            breakpointnow = int(start) + cigar_list[0][1] - 1
         flag, index = biselect(breakpoints, breakpointnow)
         if flag == 0:
             breakpoints.insert(index, (
@@ -855,6 +920,8 @@ def Build_candidate_fasta(file_candidate_seq, work_dir, f_ref, f_target, blocks_
     TB = open(tmp_bed, 'w')
     for blocks in blocks_chr.values():
         for i, block in enumerate(blocks):
+            block.start -= 100
+            block.end += 100
             TB.write(block.chrom + '\t' + str(block.start) + '\t' + str(block.end) + '\t' + str(i) + '\n')
     TB.close()
     os.system("bedtools getfasta -name -fi " + f_ref + " -bed " + tmp_bed + " > " + file_candidate_seq)
@@ -888,7 +955,9 @@ def Build_candidate_fasta(file_candidate_seq, work_dir, f_ref, f_target, blocks_
 
 def Find_Anchored_split(work_dir, file_candidate_seq, blocks_chr, breakpoints, gene_co, file_anchored_seq):
     f_tmp_fa = work_dir + "_tmp_anchored_fa.fa"
+    f_tmp_fa2 = work_dir + "_tmp_anchored_fa2.fa"
     f_tmp_blat = work_dir + "_tmp_anchored_blat.psl"
+    f_tmp_blat2 = work_dir + "_tmp_anchored_blat2.psl"
     FA = open(f_tmp_fa, 'w')
     for i, breakpoint in enumerate(breakpoints):
         if breakpoints[i].type_ == 'SM':
@@ -900,6 +969,8 @@ def Find_Anchored_split(work_dir, file_candidate_seq, blocks_chr, breakpoints, g
     os.system("blat -stepSize=3 -minScore=12 -minMatch=2 -minIdentity=90 " + file_candidate_seq + " " + f_tmp_fa + " " + f_tmp_blat)
     breakpoint_id_good = set()
     FB = open(f_tmp_blat, 'r')
+    FA2 = open(f_tmp_fa2,'w')
+    FA2_flag = 0
     for line in FB.readlines():
         if not re.match(r'^\d+\s', line):
             continue
@@ -910,24 +981,92 @@ def Find_Anchored_split(work_dir, file_candidate_seq, blocks_chr, breakpoints, g
         breakpoint_id, block_id, chrom_y, start = int(arr[9]), int(arr[13].split('::')[0]), \
                                                   arr[13].split('::')[1].split(':')[0], int(
             arr[13].split('::')[1].split(':')[1].split('-')[0])
-        start_y, end_y, strand = int(arr[15]) + start, int(arr[16]) + start, arr[8]
-        gene = gene_co.Find_gene(chrom_y, start_y, end_y)
-        #if (s > 5 or e < l - 5) and (gene[0] != 'IGH@' and gene[0]!='TRA@'):
-            #continue
+        start_y, end_y, strand = int(arr[15]) + start + 1, int(arr[16]) + start, arr[8]
         breakpoint = breakpoints[breakpoint_id]
         if breakpoint.type_ == 'SM':
             if strand == '+':
-                breakpoint.Add_other_breakpoint(chrom_y, end_y, strand, s, l-e)
+                exon,m = gene_co.Find_exon(chrom_y,end_y,end_y)
+                if exon[0] == '':
+                    continue
+                if exon[4] - 11 < end_y < exon[4] and e == l:
+                    FA2_flag = 1
+                    FA2.write('>'+str(breakpoint_id)+'$'+str(exon[4]-end_y)+'\n'+breakpoint.return_left_seq()+breakpoint.return_right_seq()[:exon[4]-end_y]+'\n')
+                    continue
+                else:
+                    breakpoint.Add_other_breakpoint(chrom_y, end_y, strand, s, l-e)
             else:
-                breakpoint.Add_other_breakpoint(chrom_y, start_y, strand, s, l-e)
+                exon,m = gene_co.Find_exon(chrom_y,start_y,start_y)
+                if exon[0] == '':
+                    continue
+                if exon[3] < start_y < exon[3] + 11 and e == l:
+                    FA2_flag = 1
+                    FA2.write('>'+str(breakpoint_id)+'$'+str(start_y-exon[3])+'\n'+breakpoint.return_left_seq()+breakpoint.return_right_seq()[:start_y-exon[3]]+'\n')
+                    continue
+                else:
+                    breakpoint.Add_other_breakpoint(chrom_y, start_y, strand, s, l - e)
         else:
             if strand == '+':
-                breakpoint.Add_other_breakpoint(chrom_y, start_y, strand, s, l - e)
+                exon,m = gene_co.Find_exon(chrom_y,start_y,start_y)
+                if exon[3] < start_y < exon[3] + 11 and s == 0:
+                    FA2_flag = 1
+                    FA2.write('>'+str(breakpoint_id)+'$'+str(start_y-exon[3])+'\n'+breakpoint.return_left_seq()[exon[3]-start_y:]+breakpoint.return_right_seq()+'\n')
+                    continue
+                else:
+                    breakpoint.Add_other_breakpoint(chrom_y, start_y, strand, s, l - e)
             else:
-                breakpoint.Add_other_breakpoint(chrom_y, end_y, strand, s, l - e)
+                exon,m = gene_co.Find_exon(chrom_y,end_y,end_y)
+                if exon[4] - 11 < end_y < exon[4] and s == 0:
+                    FA2_flag = 1
+                    FA2.write('>'+str(breakpoint_id)+'$'+str(exon[4]-1-end_y)+'\n'+breakpoint.return_left_seq()[end_y-exon[4]:]+breakpoint.return_right_seq()+'\n')
+                    continue
+                else:
+                    breakpoint.Add_other_breakpoint(chrom_y, end_y, strand, s, l - e)
         blocks_chr[chrom_y][block_id].anchored_split_breakpoints.add(breakpoint_id)
         breakpoint_id_good.add(breakpoint_id)
     FB.close()
+    FA2.close()
+    if FA2_flag == 1:
+        os.system("blat -stepSize=3 -minScore=12 -minMatch=2 -minIdentity=90 " + file_candidate_seq + " " + f_tmp_fa2 + " " + f_tmp_blat2)
+        FB2 = open(f_tmp_blat2, 'r')
+        for line in FB2.readlines():
+            if not re.match(r'^\d+\s', line):
+                continue
+            arr = line.split('\t')
+            l, s, e = int(arr[10]), int(arr[11]), int(arr[12])
+            breakpoint_id,add_length = arr[9].split('$')
+            breakpoint_id,add_length = int(breakpoint_id),int(add_length)
+            block_id, chrom_y, start = int(arr[13].split('::')[0]),arr[13].split('::')[1].split(':')[0], int(arr[13].split('::')[1].split(':')[1].split('-')[0])
+            start_y, end_y, strand = int(arr[15]) + start + 1, int(arr[16]) + start, arr[8]
+            breakpoint = breakpoints[breakpoint_id]
+            if breakpoint.type_ == 'SM':
+                if strand == '+':
+                    if e > l - add_length:
+                        breakpoint.breakpoint += e + add_length - l
+                        breakpoint.seq_left += breakpoint.seq_right[:e + add_length - l]
+                        breakpoint.seq_right =  breakpoint.seq_right[e + add_length - l:]
+                    breakpoint.Add_other_breakpoint(chrom_y, end_y, strand, s, l-e)
+                else:
+                    if e > l - add_length:
+                        breakpoint.breakpoint += e + add_length - l
+                        breakpoint.seq_left += breakpoint.seq_right[:e + add_length - l]
+                        breakpoint.seq_right =  breakpoint.seq_right[e + add_length - l:]
+                    breakpoint.Add_other_breakpoint(chrom_y, start_y, strand, s, l-e)
+            else:
+                if strand == '+':
+                    if s < add_length:
+                        breakpoint.breakpoint -= add_length - s
+                        breakpoint.seq_right = breakpoint.seq_left[s-add_length:] + breakpoint.seq_right
+                        breakpoint.seq_left = breakpoint.seq_left[:s-add_length]
+                    breakpoint.Add_other_breakpoint(chrom_y, start_y, strand, s, l - e)
+                else:
+                    if s < add_length:
+                        breakpoint.seq_right = breakpoint.seq_left[s-add_length:] + breakpoint.seq_right
+                        breakpoint.seq_left = breakpoint.seq_left[:s-add_length]
+                        breakpoint.breakpoint -= add_length - s
+                    breakpoint.Add_other_breakpoint(chrom_y, end_y, strand, s, l - e)
+            blocks_chr[chrom_y][block_id].anchored_split_breakpoints.add(breakpoint_id)
+            breakpoint_id_good.add(breakpoint_id)
+        FB2.close()
     f_tmp_anchored_fa = work_dir + "_anchored_tmp_fa.fa"
     f_tmp_anchored_psl = work_dir + "_anchored_tmp.psl"
     F = open(f_tmp_anchored_fa, 'w')
@@ -949,10 +1088,20 @@ def Find_Anchored_split(work_dir, file_candidate_seq, blocks_chr, breakpoints, g
         if l*0.9<=score:
             breakpoint_id_good.add(int(arr[9]))
     F.close()
-    # if os.path.exists(f_tmp_fa):
-    # os.remove(f_tmp_fa)
-    # if os.path.exists(f_tmp_blat):
-    # os.remove(f_tmp_blat)
+    
+    if os.path.exists(f_tmp_fa):
+        os.remove(f_tmp_fa)
+    if os.path.exists(f_tmp_blat):
+        os.remove(f_tmp_blat)
+    if os.path.exists(f_tmp_fa2):
+        os.remove(f_tmp_fa2)
+    if os.path.exists(f_tmp_blat2):
+        os.remove(f_tmp_blat2)
+    if os.path.exists(f_tmp_anchored_fa):
+        os.remove(f_tmp_anchored_fa)
+    if os.path.exists(f_tmp_anchored_psl):
+        os.remove(f_tmp_anchored_psl)
+    
     return breakpoint_id_good
 
 
@@ -990,6 +1139,18 @@ def Find_candidate_genes(out_dir_name_now, file_ref_seq, breakpoint_id_good, bre
             return True
         return False
 
+    for breakpoint in breakpoints:
+         shortest = 1000
+         for other_breakpoint in breakpoint.other_breakpoints:
+            if other_breakpoint[-1]+other_breakpoint[-2] < shortest:
+                shortest = other_breakpoint[-1]+other_breakpoint[-2]
+         i = 0
+         while i < len(breakpoint.other_breakpoints):
+            other_breakpoint = breakpoint.other_breakpoints[i]
+            if other_breakpoint[-1]+other_breakpoint[-2] != shortest:
+                del breakpoint.other_breakpoints[i]
+            else:
+                i += 1
     candidates = []
     f_tmp_fa = out_dir_name_now + "_tmp_fa.fa"
     f_tmp_psl = out_dir_name_now + "_tmp.psl"
@@ -1003,6 +1164,7 @@ def Find_candidate_genes(out_dir_name_now, file_ref_seq, breakpoint_id_good, bre
                 for other_breakpoint in breakpoints[breakpoint_id].other_breakpoints:
                     if other_breakpoint[0] != block.chrom:
                         continue
+                    block_reads = []
                     breakpoint = breakpoints[breakpoint_id]
                     type_2 = breakpoint.type_
                     seq_left2 = breakpoint.return_left_seq()
@@ -1100,24 +1262,86 @@ def Find_candidate_genes(out_dir_name_now, file_ref_seq, breakpoint_id_good, bre
     i = 0
     while i < len(candidates_new):
         pos = candidates_new[i][1]
-        if pos[6] * 10 < cnt_max:
-            del candidates_new[i]
-            continue
         j = 0
         while j < i:
-            if pos[0] == candidates_new[j][1][0] and pos[0] == candidates_new[j][1][1] and pos[0] == \
-                    candidates_new[j][1][2]:
+            if pos[0] == candidates_new[j][1][0] and pos[0] == candidates_new[j][1][1] and pos[0] == candidates_new[j][1][2]:
                 del candidates_new[i]
                 break
             j += 1
         if j == i:
             candidates.append(candidates_new[i][0])
             i += 1
-    # if os.path.exists(f_tmp_fa):
-    # os.remove(f_tmp_fa)
+    
+    if os.path.exists(f_tmp_fa):
+        os.remove(f_tmp_fa)
+    if os.path.exists(f_tmp_psl):
+        os.remove(f_tmp_psl)
+    
     return candidates
 
-def make_negative_file(out_dir_name_now, negative_samples, f_read, gene_co, file_ref_seq, homo_genes, thread, gene_name):
+def find_positions(gene_co,chrom,pos,length):
+    gene,exon_num =  gene_co.Find_exon(chrom,pos,pos)
+    poses = []
+    forward_length = length
+    backward_length = length
+    if gene[0] == '':
+        return poses
+    exon_num_now = exon_num
+    pos_now = pos - 1
+    while forward_length > 0 :
+         if gene_co.dic[chrom][exon_num_now][3] != gene[1] or gene_co.dic[chrom][exon_num_now][0]>pos_now or gene_co.dic[chrom][exon_num_now][1]+1<=pos_now:
+            exon_num_now -= 1
+            if exon_num_now < 0 or exon_num_now >= len(gene_co.dic[chrom]):
+                break
+            else:
+                pos_now = gene_co.dic[chrom][exon_num_now][1]
+                continue
+         l = pos_now - gene_co.dic[chrom][exon_num_now][0] + 1
+         if l >= forward_length:
+            poses = [(pos_now - forward_length, pos_now)]+poses
+            forward_length -= l
+         elif l != 0 :
+            forward_length -= l
+            poses= [(gene_co.dic[chrom][exon_num_now][0]-1,pos_now)]+poses
+            exon_num_now -= 1
+            if exon_num_now < 0:
+                break
+            pos_now = gene_co.dic[chrom][exon_num_now][1]
+         else:
+            exon_num_now -= 1
+            if exon_num_now < 0:
+                break
+            pos_now = gene_co.dic[chrom][exon_num_now][1]
+    exon_num_now = exon_num
+    pos_now = pos
+    poses.append(['H',''])
+    while backward_length > 0 :
+        if gene_co.dic[chrom][exon_num_now][3] != gene[1] or gene_co.dic[chrom][exon_num_now][0]>pos_now or gene_co.dic[chrom][exon_num_now][1]+1<=pos_now:
+            exon_num_now += 1
+            if  exon_num_now < 0 or exon_num_now >= len(gene_co.dic[chrom]):
+                break
+            else:
+                pos_now = gene_co.dic[chrom][exon_num_now][0]
+                continue
+        l = gene_co.dic[chrom][exon_num_now][1]+1 - pos_now
+        if l >= backward_length:
+            poses.append((pos_now-1 , pos_now + backward_length-1))
+            backward_length = 0
+        elif l != 0:
+            backward_length -= l
+            poses.append((pos_now-1,gene_co.dic[chrom][exon_num_now][1]))
+            exon_num_now += 1
+            if exon_num_now >= len(gene_co.dic[chrom]):
+                break
+            pos_now = gene_co.dic[chrom][exon_num_now][0]
+        else:
+            exon_num_now += 1
+            if exon_num_now >= len(gene_co.dic[chrom]):
+                break
+            pos_now = gene_co.dic[chrom][exon_num_now][0]
+    return poses
+
+def prepare_negative(out_dir_name_now,  f_read, gene_co, file_ref_seq, homo_genes, thread, gene_name, tmp_bed):
     def if_are_homo_genes(can_gene,homo_gene,homo_gene_list):
         if can_gene not in homo_gene_list:
             return False
@@ -1143,6 +1367,7 @@ def make_negative_file(out_dir_name_now, negative_samples, f_read, gene_co, file
     last_genes = set()
     X_last = ''
     Y_last = []
+
     O = open(file1, 'w')
     F = os.popen("samtools view -t "+thread+ ' ' + f_read).read()
     homo_gene_list = np.load(homo_genes,allow_pickle=True).item()
@@ -1153,10 +1378,10 @@ def make_negative_file(out_dir_name_now, negative_samples, f_read, gene_co, file
         if len(arr) <= 15:
             continue
         X_strand = '+'
+        Y = []
         if int(arr[1]) > 15 and bin(int(arr[1]))[-5] == '1':
             X_strand = '-'
-        X = (arr[2],arr[3],X_strand,arr[5])
-        Y = []
+        X = [arr[2],arr[3],X_strand,arr[5]]
         for tag in arr[15:]:
             if re.match(r'SA:Z:',tag):
                 Y = tag[5:].split(';')[0].split(',')
@@ -1166,30 +1391,25 @@ def make_negative_file(out_dir_name_now, negative_samples, f_read, gene_co, file
         seq = arr[9]
         l = len(seq)
         if re.match(r'\d+M\d+S', X[3]) and re.match(r'\d+S\d+M', Y[3]):
-            l_X = int(re.findall(r'(\d+)M', X[3])[0])
-            l_Y = int(re.findall(r'(\d+)S', Y[3])[0])
-            if abs(l_X - l_Y) > 5:
-                continue
-            if X[2] == '-':
-                seq = reverse(seq)
-                l_X = len(seq)-l_X
+            l_X_M = int(re.findall(r'(\d+)M', X[3])[0])
+            l_X_S = int(re.findall(r'\d+M(\d+)S', X[3])[0])
+            l_Y_S = int(re.findall(r'(\d+)S', Y[3])[0])
         elif re.match(r'\d+S\d+M', X[3]) and re.match(r'\d+M\d+S', Y[3]):
-            l_X = int(re.findall(r'\d+S(\d+)M', X[3])[0])
-            l_Y = int(re.findall(r'\d+M(\d+)S', Y[3])[0])
-            if abs(l_X - l_Y) > 5:
-                continue
-            if X[2] == '-':
-                seq = reverse(seq)
-                l_X = len(seq)-l_X
+            l_X_M = int(re.findall(r'\d+S(\d+)M', X[3])[0])
+            l_X_S = int(re.findall(r'(\d+)S\d+M', X[3])[0])
+            l_Y_S = int(re.findall(r'\d+M(\d+)S', Y[3])[0])
         else:
             continue
+        if abs(l_X_M - l_Y_S) > 5:
+            continue
+        X_left,X_right,Y_left,Y_right = X[1],str(int(X[1])+l_X_M),Y[1],str(int(Y[1])+l_X_S)
         l = len(seq)
         if l in length:
             length[l] += 1
         else:
             length[l] = 1
-        X_gene = gene_co.Find_gene(X[0], int(X[1]), int(X[1]) + 1)
-        Y_gene = gene_co.Find_gene(Y[0], int(Y[1]), int(Y[1]) + 1)
+        X_gene,_ = gene_co.Find_exon(X[0], int(X[1]), int(X[1]) + 1)
+        Y_gene,_ = gene_co.Find_exon(Y[0], int(Y[1]), int(Y[1]) + 1)
         if X_gene[1] == gene_name or Y_gene[1] == gene_name:
             continue
         if X_gene[1] == '' or Y_gene[1] == '' or X_gene[1] == Y_gene[1] or Inspect_name(X_gene[1],Y_gene[1]) or if_are_homo_genes(X_gene[1], Y_gene[1],homo_gene_list):
@@ -1208,7 +1428,30 @@ def make_negative_file(out_dir_name_now, negative_samples, f_read, gene_co, file
             Y_last.append(X_gene[1])
         else:
             X_last, Y_last = X_gene[1], [Y_gene[1]]
-        O.write('>'+str(c)+'$'+fusion_gene+'$'+str(l_X)+'\n'+seq+'\n')
+        if re.match(r'\d+M\d+S', X[3]) and re.match(r'\d+S\d+M', Y[3]):
+            if X[2] == '+':
+                if Y[2] == '+':
+                    O.write('>'+str(c)+'$'+fusion_gene+'$'+X_gene[1]+':'+X[0]+':'+X_right+':'+X[2]+'$'+Y_gene[1]+':'+Y[0]+':'+Y_left+':'+Y[2]+'\n'+seq+'\n')
+                else:
+                    O.write('>'+str(c)+'$'+fusion_gene+'$'+X_gene[1]+':'+X[0]+':'+X_right+':'+X[2]+'$'+Y_gene[1]+':'+Y[0]+':'+Y_right+':'+Y[2]+'\n'+seq+'\n')
+            if X[2] == '-':
+                seq = reverse(seq)
+                if Y[2] == '+':
+                    O.write('>'+str(c)+'$'+fusion_gene+'$'+Y_gene[1]+':'+Y[0]+':'+Y_right+':'+Y[2]+'$'+X_gene[1]+':'+X[0]+':'+X_right+':'+X[2]+'\n'+seq+'\n')
+                else:
+                    O.write('>'+str(c)+'$'+fusion_gene+'$'+Y_gene[1]+':'+Y[0]+':'+Y_left+':'+Y[2]+'$'+X_gene[1]+':'+X[0]+':'+X_right+':'+X[2]+'\n'+seq+'\n')
+        elif re.match(r'\d+S\d+M', X[3]) and re.match(r'\d+M\d+S', Y[3]):
+            if X[2] == '+':
+                if Y[2] == '+':
+                    O.write('>'+str(c)+'$'+fusion_gene+'$'+Y_gene[1]+':'+Y[0]+':'+Y_right+':'+Y[2]+'$'+X_gene[1]+':'+X[0]+':'+X_left+':'+X[2]+'\n'+seq+'\n')
+                else:
+                    O.write('>'+str(c)+'$'+fusion_gene+'$'+Y_gene[1]+':'+Y[0]+':'+Y_right+':'+Y[2]+'$'+X_gene[1]+':'+X[0]+':'+X_right+':'+X[2]+'\n'+seq+'\n')
+            if X[2] == '-':
+                seq = reverse(seq)
+                if Y[2] == '+':
+                    O.write('>'+str(c)+'$'+fusion_gene+'$'+X_gene[1]+':'+X[0]+':'+X_left+':'+X[2]+'$'+Y_gene[1]+':'+Y[0]+':'+Y_left+':'+Y[2]+'\n'+seq+'\n')
+                else:
+                    O.write('>'+str(c)+'$'+fusion_gene+'$'+X_gene[1]+':'+X[0]+':'+X_left+':'+X[2]+'$'+Y_gene[1]+':'+Y[0]+':'+Y_right+':'+Y[2]+'\n'+seq+'\n')
         c += 1
     O.close()
     ml,mc = 0,0
@@ -1217,6 +1460,14 @@ def make_negative_file(out_dir_name_now, negative_samples, f_read, gene_co, file
             ml,mc = l,c
     ms = int(ml*0.8)
     os.system("blat -stepSize=3 -minScore="+str(ms)+" -minMatch=3 -minIdentity=90 -maxGap=1 " + file_ref_seq + " " + file1 + " " + file2)
+
+    fusion_gene_dic = {}
+    O = open(file1, 'r')
+    for line in O.readlines():
+        if re.match(r'^>',line):
+            arr = line[1:-1].split('$')
+            fusion_gene_dic[arr[1]]=int(arr[0])
+    O.close
     bad_ids = set()
     F2 = open(file2,'r')
     for line in F2.readlines():
@@ -1226,68 +1477,180 @@ def make_negative_file(out_dir_name_now, negative_samples, f_read, gene_co, file
         bad_ids.add(int(arr[9].split('$')[0]))
     F2.close()
     F3 = open(file1,'r')
-    O2 = open(negative_samples,'a+')
+    T_B = open(tmp_bed,'w')
     i = 0
+    flag = True
     for line in F3.readlines():
         if re.match(r'^>',line):
-            id_now,fusion_gene,h_spot = line.rstrip()[1:].split("$")
+            id_now,fusion_gene,gene1_pos,gene2_pos = line.rstrip()[1:].split("$")
             if int(id_now) in bad_ids:
                 flag = False
             else:
-                flag, h_spot = True, int(h_spot)
+                flag = True
         else:
             if flag:
-                seq = line.rstrip()
-                if len(seq) != ml:
+                gene1,gene2 = gene1_pos.split(':'),gene2_pos.split(':')
+                poses1 = find_positions(gene_co, gene1[1] ,int(gene1[2]),100)
+                poses2 = find_positions(gene_co, gene2[1] ,int(gene2[2]),100)
+                if len(poses1) == 0 or len(poses2) == 0:
                     continue
-                O2.write(seq[:h_spot]+'H'+seq[h_spot:]+'\t'+fusion_gene+'\n')
+                flag = 'left'
+                for pos in poses1:
+                    if pos[0] == 'H':
+                        flag = 'right'
+                        continue
+                    T_B.write('\t'.join([gene1[1],str(pos[0]),str(pos[1]),fusion_gene+'$'+gene1[0]+'$'+gene1[3]+'$'+flag,gene1[3]])+'\n')
+                flag = 'left'
+                for pos in poses2:
+                    if pos[0] == 'H':
+                        flag = 'right'
+                        continue
+                    T_B.write('\t'.join([gene2[1],str(pos[0]),str(pos[1]),fusion_gene+'$'+gene2[0]+'$'+gene2[3]+'$'+flag,gene2[3]])+'\n')
+    T_B.close()
     F3.close()
-    O2.close()
+    if os.path.exists(file1):
+        os.remove(file1)
+    if os.path.exists(file2):
+        os.remove(file2)
     return
 
+def make_negative_file(output_dir, file_ref_seq, f_read, output_file, gene_co, homo_genes, thread, gene_name):
+    tmp_bed = output_dir+'_negative_samples.bed'
+    tmp_fasta = output_dir+'_negative_samples.fasta'
+    prepare_negative(output_dir,  f_read, gene_co, file_ref_seq, homo_genes, thread, gene_name, tmp_bed)
+    os.system('bedtools getfasta -s -nameOnly -fi '+file_ref_seq+' -bed '+tmp_bed+' -fo '+tmp_fasta)
+    O = open(output_file,'w')
+    T_F = open(tmp_fasta,'r')
+    flag = 2
+    last_name = ''
+    seq_left1,seq_right1,seq_left2,seq_right2 = '','','',''
+    last_strand = ''
+    write_name = ''
+    fusion_gene = ''
+    last_fusion_gene = ''
+    i = 0
+    lines = T_F.readlines()
+    while i < len(lines):
+        if re.match(r'^>',lines[i]):
+            fusion_gene,gene_name,strand,dir = lines[i][1:-3].split('$')
+            if gene_name != last_name or fusion_gene != last_fusion_gene:
+                if flag == 2:
+                    if last_name != '':
+                        if last_strand == '-':
+                            seq_left2,seq_right2 = reverse(seq_right2),reverse(seq_left2)
+                            O.write('N'*(100-len(seq_left1))+seq_left1+'H'+seq_right1+'N'*(100-len(seq_right1))+'D'+'N'*(100-len(seq_left2))+seq_left2+'H'+seq_right2+'N'*(100-len(seq_right2))+'\t'+write_name+'\n')
+                    flag = 1
+                    seq_left1,seq_right1,seq_left2,seq_right2 = '','','',''
+                    write_name=gene_name
+                    last_name = gene_name
+                    last_strand = strand
+                    last_fusion_gene = fusion_gene
+                else:
+                    if last_name != '':
+                        if last_strand == '-':
+                            seq_left1,seq_right1 = reverse(seq_right1),reverse(seq_left1)
+                    flag = 2
+                    write_name = write_name + '->' + gene_name
+                    last_name = gene_name
+                    last_strand = strand
+                    last_fusion_gene = fusion_gene
+        else:
+            if flag == 1:
+                if dir == 'left':
+                    seq_left1 += lines[i][:-1].upper()
+                else:
+                    seq_right1 += lines[i][:-1].upper()
+            else:
+                if dir == 'left':
+                    seq_left2 += lines[i][:-1].upper()
+                else:
+                    seq_right2 += lines[i][:-1].upper()
+        i += 1
+    O.close()
+    T_F.close()
+    if os.path.exists(tmp_bed):
+        os.remove(tmp_bed)
+    if os.path.exists(tmp_fasta):
+        os.remove(tmp_fasta)
+    return
 
-def get_test_reads(test_file,candidates_new,len_seq,state='b'):
+def get_test_reads(output_dir,test_file,candidates_new,f_target,file_ref_seq,gene_co):
     c = 0
-    F = open(test_file,'w')
+    target_sequence = ''
+    IF = open(f_target,'r')
+    for line in IF.readlines()[1:]:
+        target_sequence+=line.rstrip()
+    IF.close()
+    tmp_bed = output_dir+'_test_negative_samples.bed'
+    tmp_fasta = output_dir+'_test_negative_samples.fasta'
+    T_B = open(tmp_bed,'w')
+    O = open(test_file,'w')
+    pos_and_mid = []
+    id_=0
     for candidate_new in candidates_new:
-        if state == 'sc':
-            l_left,l_mid,l_right = len(candidates_new[1]),len(candidates_new[2]),len(candidates_new[3])
-            type_,seq_left,seq_mid,seq_right = candidates_new[0],candidates_new[1],candidates_new[2],candidates_new[3]
-        else:
-            l_left,l_mid,l_right = candidate_new.l_left , candidate_new.l_mid , candidate_new.l_right
-            type_,seq_left,seq_mid,seq_right = candidate_new.type_ , candidate_new.return_seq_left() , candidate_new.return_seq_mid() , candidate_new.return_seq_right()
+        pos, max_id = candidate_new.find_max_pos()
+        target_breakpoint, chrom, other_breakpoint, strand = pos[0], pos[1], pos[2], pos[3]
+        type_ = candidate_new.type_
+        if (target_breakpoint, chrom, other_breakpoint, strand) in pos_and_mid:
+            continue
+        pos_and_mid.append((target_breakpoint, chrom, other_breakpoint, strand))
+        poses = find_positions(gene_co, chrom ,other_breakpoint, 100)
+        flag = 'left'
+        for pos in poses:
+           if pos[0] == 'H':
+              flag = 'right'
+              continue
+           T_B.write('\t'.join([chrom,str(pos[0]),str(pos[1]),str(id_)+'$'+strand+'$'+flag,strand])+'\n')
+        id_ += 1
+    T_B.close()
+    os.system('bedtools getfasta -s -nameOnly -fi '+file_ref_seq+' -bed '+tmp_bed+' -fo '+tmp_fasta)
+    T_F = open(tmp_fasta,'r')
+    lines = T_F.readlines()
+    last_id = '0'
+    pos_and_mid = []
+    strand_last = '+'
+    i = 0
+    for candidate_new in candidates_new:
+        pos, max_id = candidate_new.find_max_pos()
+        target_breakpoint, chrom, other_breakpoint, strand = pos[0], pos[1], pos[2], pos[3]
+        type_ = candidate_new.type_
+        if (target_breakpoint, chrom, other_breakpoint, strand) in pos_and_mid:
+            continue
+        pos_and_mid.append((target_breakpoint, chrom, other_breakpoint, strand))
+        seq_left2,seq_right2 = '',''
+        while i < len(lines):
+            if re.match(r'^>',lines[i]):
+                fusion_id,strand,dir = lines[i][1:-3].split('$')
+                if fusion_id != last_id:
+                    last_id = fusion_id
+                    break
+                strand_last = strand
+            else:
+                if dir == 'left':
+                    seq_left2 += lines[i][:-1].upper()
+                else:
+                    seq_right2 += lines[i][:-1].upper()
+            i += 1
+        if strand_last == '-':
+                seq_left2,seq_right2 = reverse(seq_right2),reverse(seq_left2)
+        seq_left1,seq_right1 = target_sequence[target_breakpoint-101:target_breakpoint-1],target_sequence[target_breakpoint-1:target_breakpoint+99]
         if type_ == 'MS':
-            if l_left + l_mid + l_right < len_seq:
-                need = len_seq - l_left  - l_mid - l_right
-                seq = 'N'*(need-need//2) + seq_left+ 'H' + seq_mid + seq_right + 'N'*(need//2)
-            elif l_left < (len_seq-l_mid) // 2:
-                seq = seq_left + 'H' + seq_mid + seq_right[:len_seq-l_left-l_mid]
-            elif l_right < (len_seq-l_mid) // 2:
-                seq = seq_left[l_right+l_mid-len_seq:] + 'H' + seq_mid + seq_right
-            else:
-                l_right = (len_seq-l_mid) // 2
-                seq = seq_left[l_right+l_mid-len_seq:] + 'H' + seq_mid + seq_right[:l_right]
+            O.write('N'*(100-len(seq_left1))+seq_left1+'H'+seq_right1+'N'*(100-len(seq_right1))+'D'+'N'*(100-len(seq_left2))+seq_left2+'H'+seq_right2+'N'*(100-len(seq_right2))+'\t'+last_id+'\n')
         else:
-            if l_left + l_mid + l_right < len_seq:
-                need = len_seq - l_left  - l_mid - l_right
-                seq = 'N'*(need//2) + seq_left + seq_mid+ 'H' + seq_right + 'N'*(need - need//2)
-            elif l_left < (len_seq-l_mid) // 2:
-                seq = seq_left +  seq_mid +'H' +  seq_right[:len_seq-l_left-l_mid]
-            elif l_right < (len_seq-l_mid) // 2:
-                seq = seq_left[l_right+l_mid-len_seq:] + seq_mid + 'H' +  seq_right
-            else:
-                l_right = (len_seq-l_mid) // 2
-                seq = seq_left[l_right+l_mid-len_seq:] + seq_mid +'H' +  seq_right[:l_right]
-        F.write(seq+'\t'+str(c)+'\n')
-        c += 1
-    F.close()
+            O.write('N'*(100-len(seq_left2))+seq_left2+'H'+seq_right2+'N'*(100-len(seq_right2))+'D'+'N'*(100-len(seq_left1))+seq_left1+'H'+seq_right1+'N'*(100-len(seq_right1))+'\t'+last_id+'\n')
+    O.close()
+    T_F.close()
+    if os.path.exists(tmp_bed):
+        os.remove(tmp_bed)
+    if os.path.exists(tmp_fasta):
+        os.remove(tmp_fasta)
     return
 
-def Final_fusion(out_dir_name_now,  candidates_new, gene_name, gene_co,not_fiter=True):
+def Final_fusion(out_dir_name_now,  candidates_new, gene_name, gene_co, score, not_fiter=True):
     def deal_pos(pos, gene_name, gene_co):
         target_breakpoint, chrom, other_breakpoint, strand = pos[0], pos[1], pos[2], pos[3]
         mid_seq = pos[10]
-        other_gene = gene_co.Find_gene(chrom, other_breakpoint, other_breakpoint + 1)
+        other_gene,_ = gene_co.Find_exon(chrom, other_breakpoint, other_breakpoint + 1)
         if pos[9] == 'SM':
             fusion_gene = other_gene[1] + '--' + gene_name
         else:
@@ -1298,7 +1661,7 @@ def Final_fusion(out_dir_name_now,  candidates_new, gene_name, gene_co,not_fiter
 
     def deal_pos2(type_, pos, gene_name, gene_co):
         target_breakpoint, chrom, other_breakpoint, strand = pos[0], pos[1], pos[2], pos[3]
-        other_gene = gene_co.Find_gene(chrom, other_breakpoint, other_breakpoint + 1)
+        other_gene,_ = gene_co.Find_exon(chrom, other_breakpoint, other_breakpoint + 1)
         if type_ == 'SM':
             fusion_gene = other_gene[1] + ':' + chrom + ':' + str(other_breakpoint) + '--' + gene_name + ':' + str(
                 target_breakpoint)
@@ -1307,9 +1670,6 @@ def Final_fusion(out_dir_name_now,  candidates_new, gene_name, gene_co,not_fiter
                 other_breakpoint)
         return fusion_gene
 
-    file_tmp_fa = out_dir_name_now + "_tmp_fa.fa"
-    file_tmp_sam = out_dir_name_now + "_tmp_sam.sam"
-    file_tmp_bed = out_dir_name_now + "_tmp.bed"
     file_abridged_output = out_dir_name_now + '_fusion_predictions_abridged.txt'
     file_output = out_dir_name_now + '_fusion_predictions.txt'
     FA = open(file_abridged_output, 'w')
@@ -1320,6 +1680,7 @@ def Final_fusion(out_dir_name_now,  candidates_new, gene_name, gene_co,not_fiter
     else:
         FA.write("Fusion_gene" + "\t" + "Anchored_gene_X" + "\t" + "X_clip_location" + "\t" + "Partner_gene_Y" + "\t" + "Y_clip_location" + "\t"+"Natural_score"+"\t" + "Spanning_read_count" + "\t" + "Breakpoint_read_count" + "\n")
         FO.write("Fusion_gene" + "\t" + "Anchored_gene_X" + "\t" + "X_clip_location" + "\t" + "Partner_gene_Y" + "\t" +  "Y_clip_location" + "\t"+"Natural_score"+"\t" + "Spanning_read_count" + "\t" + "Breakpoint_read_count" + "\t" + "Spanning_reads" + "\t" + "Breakpoint_reads" + "\t" + "Breakpoint_site_reads_1" + '\t' + 'Breakpoint_site_reads_2' + '\t' + 'Homo_genes'+"\tLeft_sequence\tMiddle_sequence\tRight_sequence"+'\n')
+    j = 0
     pos_and_mid = []
     for candidate_new in candidates_new:
         pos, max_id = candidate_new.find_max_pos()
@@ -1331,7 +1692,7 @@ def Final_fusion(out_dir_name_now,  candidates_new, gene_name, gene_co,not_fiter
         pos_and_mid.append((target_breakpoint, chrom, other_breakpoint, strand))
         spanning_reads = list(set(candidate_new.spanning_reads))
         split_reads = list(set(candidate_new.split_reads))
-        if len(spanning_reads) * 5 < len(split_reads) or len(split_reads) * 5 < len(spanning_reads):
+        if len(spanning_reads) * 10 < len(split_reads) or len(split_reads) * 10 < len(spanning_reads):
             continue
         if len(spanning_reads) == 0 and len(split_reads) == 0:
             continue
@@ -1343,18 +1704,13 @@ def Final_fusion(out_dir_name_now,  candidates_new, gene_name, gene_co,not_fiter
         for i, pos in enumerate(candidate_new.pos):
             if i != max_id:
                 other_fusion_genes.append(deal_pos2(type_, pos, gene_name, gene_co))
-        seqs =  candidate_new.return_seq_left()+'\t' +  candidate_new.return_seq_mid() + '\t' +candidate_new.return_seq_right()
         if not_fiter:
-            FO.write(write_line + '\t' + str(len(spanning_reads)) + '\t' + str(len(split_reads)) + '\t' + ';'.join(spanning_reads) + '\t' + ';'.join(split_reads) + '\t' + ';'.join(other_fusion_genes) +seqs+ '\n')
+            FO.write(write_line + '\t' + str(len(spanning_reads)) + '\t' + str(len(split_reads)) + '\t' + ';'.join(spanning_reads) + '\t' + ';'.join(split_reads) + '\t' + ';'.join(other_fusion_genes) + '\n')
         else:
-            FO.write(write_line + '\t'+str(candidate_new.score)+'\t' + str(len(spanning_reads)) + '\t' + str(len(split_reads)) + '\t' + ';'.join(spanning_reads) + '\t' + ';'.join(split_reads) + '\t' + ';'.join(other_fusion_genes) +seqs+ '\n')
+            FO.write(write_line + '\t'+str(score[j])+'\t' + str(len(spanning_reads)) + '\t' + str(len(split_reads)) + '\t' + ';'.join(spanning_reads) + '\t' + ';'.join(split_reads) + '\t' + ';'.join(other_fusion_genes) +'\n')
+            j += 1
     FA.close()
     FO.close()
-    #if os.path.exists(file_tmp_fa):
-        #os.remove(file_tmp_fa)
-    # if os.path.exists(file_tmp_sam):
-    # os.remove(file_tmp_sam)
-    # if os.path.exists(file_tmp_bed):
-    # os.remove(file_tmp_bed)
+
     return
 
