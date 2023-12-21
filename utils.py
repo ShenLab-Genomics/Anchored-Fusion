@@ -15,20 +15,40 @@ class Gene_co():
                 continue
             arr = line.split('\t')
             if arr[2] == "exon":
-                tmp = re.findall(r'gene_id\s+"(ENSG\d+\S+)";\s+.+gene_name\s+"(\S+)";\s+',
-                                 arr[8])
-                if len(tmp) != 0:
-                    gene_id = tmp[0][0]
-                    gene_name = tmp[0][1]
-                    if arr[0] not in self.dic:
-                        self.dic[arr[0]] = [[int(arr[3]), int(arr[4]), gene_id, gene_name]]
-                    else:
-                        self.dic[arr[0]].append([int(arr[3]), int(arr[4]), gene_id, gene_name])
+                tmp = arr[8].rstrip().split(';')
+                for tmp_1 in tmp:
+                    tmp_2 = tmp_1.rstrip()
+                    if tmp_2 == '':
+                        continue
+                    if tmp_2[0] == ' ':
+                        tmp_2 = tmp_2[1:]
+                    tmp_2 = tmp_2.split(' ')
+                    if len(tmp_2) == 2:
+                        if tmp_2[0] == 'gene_id':
+                            gene_id =tmp_2[1]
+                        if tmp_2[0] == 'gene_name':
+                            gene_name =tmp_2[1]
+                        if tmp_2[0] == 'transcript_type':
+                            transcript_type = tmp_2[1]
+                            break
+                if transcript_type.find('pseudogene')!=-1 or transcript_type in ['artifact','protein_coding_LoF']:
+                    continue
+                if arr[0] not in self.dic:
+                     self.dic[arr[0]] = [[int(arr[3]), int(arr[4]), gene_id, gene_name]]
+                else:
+                     self.dic[arr[0]].append([int(arr[3]), int(arr[4]), gene_id, gene_name])
+        if 'chr14' not in self.dic:
+            self.dic['chr14'] = []
+        self.dic['chr14'].append([105586337, 106879944,'IGH@', 'IGH@'])
+        self.dic['chr14'].append([21621804, 22552332,'TRA@', 'TRA@'])
+        if 'KI270846.1' not in self.dic:
+            self.dic['KI270846.1'] = []
+        self.dic['KI270846.1'].append([0, 1351393,'IGH@', 'IGH@'])
         for key, value in self.dic.items():
             value.sort()
             i = 0
             while i < len(value) - 1:
-                if value[i][1] >= value[i + 1][0] and value[i][2] == value[i+1][2]:
+                if value[i][1] >= value[i + 1][0] and (value[i][2] == value[i+1][2] or value[i][2] in ['IGH@','TRA@']):
                     if value[i][1] >= value[i + 1][1]:
                         del value[i + 1]
                     else:
@@ -54,7 +74,7 @@ class Gene_co():
             return [chr_list[m][2], chr_list[m][3], chrome, chr_list[m][0], chr_list[m][1]],m
         else:
             m_new = m - 1
-            while m_new >= 0 and chr_list[m_new][0] - 10 <= start and chr_list[m_new][1] + 10 >= start:
+            while m_new >= 0 and chr_list[m_new][0] - 10 <= start and chr_list[m_new][1] + 10 >= end:
                 if chr_list[m_new][1] + 10 >= end:
                     return [chr_list[m_new][2], chr_list[m_new][3], chrome, chr_list[m_new][0], chr_list[m_new][1]],m_new
                 m_new -= 1
@@ -426,33 +446,42 @@ def Find_blocks(f_read, gene_co, homo_genes):
             else:
                 blocks.insert(i + 1, block)
                 i += 1
-
         while i < len(blocks) - 1 and blocks[i].gene[0] == blocks[i + 1].gene[0]:
-            if blocks[i+1].min_exon_num - blocks[i].max_exon_num <= 3:
-                blocks[i].Add_block(blocks[i + 1])
-                del blocks[i + 1]
+            if blocks[i+1].min_exon_num == blocks[i].max_exon_num:
+                if blocks[i].end + 200 > blocks[i+1].start:
+                    blocks[i].Add_block(blocks[i + 1])
+                    del blocks[i + 1]
+                else:
+                    break
             else:
                 exon_num_now = blocks[i].max_exon_num + 1
-                length = 0
+                length = gene_co.dic[chrom][blocks[i].max_exon_num][1]-blocks[i].end
                 while exon_num_now < blocks[i+1].min_exon_num:
                     if gene_co.dic[chrom][exon_num_now][2] == blocks[i].gene[0] and gene_co.dic[chrom][exon_num_now][0] > gene_co.dic[chrom][exon_num_now-1][1]:
                         length += gene_co.dic[chrom][exon_num_now][1] - gene_co.dic[chrom][exon_num_now][0]
                     exon_num_now += 1
+                if exon_num_now == blocks[i+1].min_exon_num:
+                    length += blocks[i+1].start - gene_co.dic[chrom][exon_num_now][0]
                 if length <= 200:
                     blocks[i].Add_block(blocks[i + 1])
                     del blocks[i + 1]
                 else:
                     break
         while i >= 1 and blocks[i].gene[0] == blocks[i - 1].gene[0]:
-            if blocks[i].min_exon_num - blocks[i-1].max_exon_num <= 3:
-                blocks[i].Add_block(blocks[i - 1])
-                del blocks[i - 1]
+            if blocks[i].min_exon_num == blocks[i-1].max_exon_num:
+                if blocks[i].start-200<blocks[i-1].end:
+                    blocks[i].Add_block(blocks[i - 1])
+                    del blocks[i - 1]
+                else:
+                    break
             else:
-                exon_num_now,length = blocks[i].min_exon_num - 1,0
+                exon_num_now,length = blocks[i].min_exon_num - 1,blocks[i].start - gene_co.dic[chrom][blocks[i].min_exon_num][0]
                 while exon_num_now > blocks[i-1].max_exon_num:
                     if gene_co.dic[chrom][exon_num_now][2] == blocks[i].gene[0] and gene_co.dic[chrom][exon_num_now][1] < gene_co.dic[chrom][exon_num_now+1][0]:
                         length += gene_co.dic[chrom][exon_num_now][1] - gene_co.dic[chrom][exon_num_now][0]
                     exon_num_now -= 1
+                if exon_num_now == blocks[i-1].min_exon_num:
+                    length += gene_co.dic[chrom][exon_num_now][1] - blocks[i-1].end
                 if length <= 200:
                     blocks[i].Add_block(blocks[i - 1])
                     del blocks[i - 1]
@@ -461,7 +490,7 @@ def Find_blocks(f_read, gene_co, homo_genes):
             i -= 1
     for blocks in blocks_chr.values():
         for block in blocks:
-            block.start, block.end = gene_co.dic[block.chrom][block.min_exon_num][0], gene_co.dic[block.chrom][block.max_exon_num][1]
+            block.start, block.end = max(block.start-200,gene_co.dic[block.chrom][block.min_exon_num][0]), min(block.end+200,gene_co.dic[block.chrom][block.max_exon_num][1])
     return blocks_chr
 
 def reverse(seq):
@@ -496,8 +525,7 @@ def Find_fine_block(f_read,file_ref_seq,work_dir,gene_co, homo_genes,block_chr):
         i += 1
     O.close()
     F.close()
-    if not os.path.exists(f_tmp_blat):
-        os.system("blat -minScore=20 " + file_ref_seq + " " + fa_reads + " " + f_tmp_blat)
+    os.system("blat -minScore=20 " + file_ref_seq + " " + fa_reads + " " + f_tmp_blat)
     F = open(f_tmp_blat,'r')
     last_id = -1
     bad_flag = 0
@@ -550,31 +578,41 @@ def Find_fine_block(f_read,file_ref_seq,work_dir,gene_co, homo_genes,block_chr):
                                 Block_now.insert(j + 1, block_now)
                                 j += 1
                         while j < len(Block_now) - 1 and Block_now[j].gene[0] == Block_now[j + 1].gene[0]:
-                            if Block_now[j+1].min_exon_num - Block_now[j].max_exon_num <= 3:
-                                Block_now[j].Add_block(Block_now[j + 1])
-                                del Block_now[j + 1]
+                            if Block_now[j+1].min_exon_num == Block_now[j].max_exon_num:
+                                if Block_now[j].end + 200 > Block_now[j+1].start:
+                                    Block_now[j].Add_block(Block_now[j + 1])
+                                    del Block_now[j + 1]
+                                else:
+                                    break
                             else:
                                 exon_num_now = Block_now[j].max_exon_num + 1
-                                length = 0
+                                length = gene_co.dic[chrom][Block_now[j].max_exon_num][1]-Block_now[j].end
                                 while exon_num_now < Block_now[j+1].min_exon_num:
                                     if gene_co.dic[block[0]][exon_num_now][2] == Block_now[j].gene[0] and gene_co.dic[block[0]][exon_num_now][0] > gene_co.dic[block[0]][exon_num_now-1][1]:
                                         length += gene_co.dic[block[0]][exon_num_now][1] - gene_co.dic[block[0]][exon_num_now][0]
                                     exon_num_now += 1
+                                if exon_num_now == Block_now[j+1].min_exon_num:
+                                    length += Block_now[j+1].start - gene_co.dic[chrom][exon_num_now][0]
                                 if length <= 200:
                                     Block_now[j].Add_block(Block_now[j + 1])
                                     del Block_now[j + 1]
                                 else:
                                     break
                         while j >= 1 and Block_now[j].gene[0] == Block_now[j - 1].gene[0]:
-                            if Block_now[j].min_exon_num - Block_now[j-1].max_exon_num <= 3:
-                                Block_now[j].Add_block(Block_now[j - 1])
-                                del Block_now[j - 1]
+                            if Block_now[j].min_exon_num == Block_now[j-1].max_exon_num:
+                                if Block_now[j].start - 200 < Block_now[j-1].end:
+                                    Block_now[j].Add_block(Block_now[j - 1])
+                                    del Block_now[j - 1]
+                                else:
+                                    break
                             else:
-                                exon_num_now,length = Block_now[j].min_exon_num - 1,0
+                                exon_num_now,length = Block_now[j].min_exon_num - 1,Block_now[j].start - gene_co.dic[chrom][Block_now[j].min_exon_num][0]
                                 while exon_num_now > Block_now[j-1].max_exon_num:
                                     if gene_co.dic[block[0]][exon_num_now][2] == Block_now[j].gene[0] and gene_co.dic[block[0]][exon_num_now][1] < gene_co.dic[block[0]][exon_num_now+1][0]:
                                         length += gene_co.dic[block[0]][exon_num_now][1] - gene_co.dic[block[0]][exon_num_now][0]
                                     exon_num_now -= 1
+                                if exon_num_now == Block_now[j-1].min_exon_num:
+                                    length += gene_co.dic[chrom][exon_num_now][1] - Block_now[j-1].end
                                 if length <= 200:
                                     Block_now[j].Add_block(Block_now[j - 1])
                                     del Block_now[j - 1]
@@ -607,12 +645,12 @@ def Find_fine_block(f_read,file_ref_seq,work_dir,gene_co, homo_genes,block_chr):
                 gene,_ = gene_co.Find_exon(chrom,start,end)
                 if gene[0] in homo_genes:
                     good_flag = 1
-    
+    '''
     if os.path.exists(fa_reads):
         os.remove(fa_reads)
     if os.path.exists(f_tmp_blat):
         os.remove(f_tmp_blat)
-    
+    '''
     return block_chr
 
 def deal_cigar(cigar, seq):
@@ -1007,6 +1045,8 @@ def Find_Anchored_split(work_dir, file_candidate_seq, blocks_chr, breakpoints, g
         else:
             if strand == '+':
                 exon,m = gene_co.Find_exon(chrom_y,start_y,start_y)
+                if exon[0] == '':
+                    continue
                 if exon[3] < start_y < exon[3] + 11 and s == 0:
                     FA2_flag = 1
                     FA2.write('>'+str(breakpoint_id)+'$'+str(start_y-exon[3])+'\n'+breakpoint.return_left_seq()[exon[3]-start_y:]+breakpoint.return_right_seq()+'\n')
@@ -1015,6 +1055,8 @@ def Find_Anchored_split(work_dir, file_candidate_seq, blocks_chr, breakpoints, g
                     breakpoint.Add_other_breakpoint(chrom_y, start_y, strand, s, l - e)
             else:
                 exon,m = gene_co.Find_exon(chrom_y,end_y,end_y)
+                if exon[0] == '':
+                    continue
                 if exon[4] - 11 < end_y < exon[4] and s == 0:
                     FA2_flag = 1
                     FA2.write('>'+str(breakpoint_id)+'$'+str(exon[4]-1-end_y)+'\n'+breakpoint.return_left_seq()[end_y-exon[4]:]+breakpoint.return_right_seq()+'\n')
@@ -1088,7 +1130,7 @@ def Find_Anchored_split(work_dir, file_candidate_seq, blocks_chr, breakpoints, g
         if l*0.9<=score:
             breakpoint_id_good.add(int(arr[9]))
     F.close()
-    
+    '''
     if os.path.exists(f_tmp_fa):
         os.remove(f_tmp_fa)
     if os.path.exists(f_tmp_blat):
@@ -1101,7 +1143,7 @@ def Find_Anchored_split(work_dir, file_candidate_seq, blocks_chr, breakpoints, g
         os.remove(f_tmp_anchored_fa)
     if os.path.exists(f_tmp_anchored_psl):
         os.remove(f_tmp_anchored_psl)
-    
+    '''
     return breakpoint_id_good
 
 
@@ -1138,7 +1180,6 @@ def Find_candidate_genes(out_dir_name_now, file_ref_seq, breakpoint_id_good, bre
         if score_left > threshold and score_right > threshold:
             return True
         return False
-
     for breakpoint in breakpoints:
          shortest = 1000
          for other_breakpoint in breakpoint.other_breakpoints:
@@ -1271,12 +1312,12 @@ def Find_candidate_genes(out_dir_name_now, file_ref_seq, breakpoint_id_good, bre
         if j == i:
             candidates.append(candidates_new[i][0])
             i += 1
-    
+    '''
     if os.path.exists(f_tmp_fa):
         os.remove(f_tmp_fa)
     if os.path.exists(f_tmp_psl):
         os.remove(f_tmp_psl)
-    
+    '''
     return candidates
 
 def find_positions(gene_co,chrom,pos,length):
@@ -1670,8 +1711,8 @@ def Final_fusion(out_dir_name_now,  candidates_new, gene_name, gene_co, score, n
                 other_breakpoint)
         return fusion_gene
 
-    file_abridged_output = out_dir_name_now + '_fusion_predictions_abridged.txt'
-    file_output = out_dir_name_now + '_fusion_predictions.txt'
+    file_abridged_output = out_dir_name_now + '_new_fusion_predictions_abridged.txt'
+    file_output = out_dir_name_now + '_new_fusion_predictions.txt'
     FA = open(file_abridged_output, 'w')
     FO = open(file_output, 'w')
     if not_fiter:
@@ -1713,4 +1754,3 @@ def Final_fusion(out_dir_name_now,  candidates_new, gene_name, gene_co, score, n
     FO.close()
 
     return
-
