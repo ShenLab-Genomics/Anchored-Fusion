@@ -25,12 +25,11 @@ class Gene_co():
                     tmp_2 = tmp_2.split(' ')
                     if len(tmp_2) == 2:
                         if tmp_2[0] == 'gene_id':
-                            gene_id =tmp_2[1]
+                            gene_id =tmp_2[1][1:-1]
                         if tmp_2[0] == 'gene_name':
-                            gene_name =tmp_2[1]
+                            gene_name =tmp_2[1][1:-1]
                         if tmp_2[0] == 'transcript_type':
-                            transcript_type = tmp_2[1]
-                            break
+                            transcript_type = tmp_2[1][1:-1]
                 if transcript_type.find('pseudogene')!=-1 or transcript_type in ['artifact','protein_coding_LoF']:
                     continue
                 if arr[0] not in self.dic:
