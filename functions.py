@@ -1390,7 +1390,7 @@ def find_positions(gene_co,chrom,pos,length):
             pos_now = gene_co.dic[chrom][exon_num_now][0]
     return poses
 
-def prepare_negative(out_dir_name_now,  f_read, gene_co, file_ref_seq, homo_genes, thread, gene_name, tmp_bed):
+def prepare_negative(out_dir_name_now,  f_read, gene_co, file_ref_seq, homo_genes, thread, gene_names, tmp_bed):
     def if_are_homo_genes(can_gene,homo_gene,homo_gene_list):
         if can_gene not in homo_gene_list:
             return False
@@ -1410,7 +1410,11 @@ def prepare_negative(out_dir_name_now,  f_read, gene_co, file_ref_seq, homo_gene
             return True
         return False
 
-    gene_name = gene_name.upper()
+    gene_names_now = []
+    for gene_name in gene_names:
+        gene_name = gene_name.upper()
+        gene_names_now.append(gene_name)
+    gene_names = gene_names_now
     file1 = out_dir_name_now+'_negative_all_seq2.txt'
     file2 = out_dir_name_now+'_negative_all_seq.psl'
     last_genes = set()
@@ -1466,7 +1470,7 @@ def prepare_negative(out_dir_name_now,  f_read, gene_co, file_ref_seq, homo_gene
             continue
         X_gene,_ = gene_co.Find_exon(X[0], int(X[1]), int(X[1]) + 1)
         Y_gene,_ = gene_co.Find_exon(Y[0], int(Y[1]), int(Y[1]) + 1)
-        if X_gene[1] == gene_name or Y_gene[1] == gene_name:
+        if X_gene[1] in gene_names or Y_gene[1] in gene_names:
             continue
         if X_gene[1] == '' or Y_gene[1] == '' or X_gene[1] == Y_gene[1] or Inspect_name(X_gene[1],Y_gene[1]) or if_are_homo_genes(X_gene[1], Y_gene[1],homo_gene_list):
             continue
@@ -1572,10 +1576,10 @@ def prepare_negative(out_dir_name_now,  f_read, gene_co, file_ref_seq, homo_gene
 
     return
 
-def make_negative_file(output_dir, file_ref_seq, f_read, output_file, gene_co, homo_genes, thread, gene_name):
+def make_negative_file(output_dir, file_ref_seq, f_read, output_file, gene_co, homo_genes, thread, gene_names):
     tmp_bed = output_dir+'_negative_samples.bed'
     tmp_fasta = output_dir+'_negative_samples.fasta'
-    prepare_negative(output_dir,  f_read, gene_co, file_ref_seq, homo_genes, thread, gene_name, tmp_bed)
+    prepare_negative(output_dir,  f_read, gene_co, file_ref_seq, homo_genes, thread, gene_names, tmp_bed)
     os.system('bedtools getfasta -s -nameOnly -fi '+file_ref_seq+' -bed '+tmp_bed+' -fo '+tmp_fasta)
     O = open(output_file,'w')
     T_F = open(tmp_fasta,'r')
@@ -1597,6 +1601,7 @@ def make_negative_file(output_dir, file_ref_seq, f_read, output_file, gene_co, h
                         if last_strand == '-':
                             seq_left2,seq_right2 = reverse(seq_right2),reverse(seq_left2)
                             O.write('N'*(100-len(seq_left1))+seq_left1+'H'+seq_right2+'N'*(100-len(seq_right2))+'\t'+write_name+'\n')
+                            #O.write('N'*(100-len(seq_left1))+seq_left1+'H'+seq_right1+'N'*(100-len(seq_right1))+'D'+'N'*(100-len(seq_left2))+seq_left2+'H'+seq_right2+'N'*(100-len(seq_right2))+'\t'+write_name+'\n')
                     flag = 1
                     seq_left1,seq_right1,seq_left2,seq_right2 = '','','',''
                     write_name=gene_name
@@ -1632,6 +1637,7 @@ def make_negative_file(output_dir, file_ref_seq, f_read, output_file, gene_co, h
         os.remove(tmp_fasta)
 
     return
+
 
 def get_test_reads(output_dir,test_file,candidates_new,f_target,file_ref_seq,gene_co):
     c = 0
