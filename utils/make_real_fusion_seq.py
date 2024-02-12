@@ -13,20 +13,40 @@ class Gene_co():
                 continue
             arr = line.split('\t')
             if arr[2] == "exon":
-                tmp = re.findall(r'gene_id\s+"(ENSG\d+\S+)";\s+.+gene_type\s+"(\S+)";\s+.+gene_name\s+"(\S+)";\s+transcript_type\s+"protein_coding";\s+',arr[8])
-                if len(tmp) != 0:
-                    gene_id = tmp[0][0]
-                    gene_type = tmp[0][1]
-                    gene_name = tmp[0][2]
-                    if arr[0] not in self.dic:
-                        self.dic[arr[0]] = [[int(arr[3]), int(arr[4])+1, gene_id, gene_name]]
-                    else:
-                        self.dic[arr[0]].append([int(arr[3]), int(arr[4])+1, gene_id, gene_name])
+                tmp = arr[8].rstrip().split(';')
+                for tmp_1 in tmp:
+                    tmp_2 = tmp_1.rstrip()
+                    if tmp_2 == '':
+                        continue
+                    if tmp_2[0] == ' ':
+                        tmp_2 = tmp_2[1:]
+                    tmp_2 = tmp_2.split(' ')
+                    if len(tmp_2) == 2:
+                        if tmp_2[0] == 'gene_id':
+                            gene_id =tmp_2[1][1:-1]
+                        if tmp_2[0] == 'gene_name':
+                            gene_name =tmp_2[1][1:-1]
+                        if tmp_2[0] == 'transcript_type':
+                            transcript_type = tmp_2[1][1:-1]
+
+                if transcript_type.find('pseudogene')!=-1 or transcript_type in ['artifact','protein_coding_LoF']:
+                    continue
+                if arr[0] not in self.dic:
+                     self.dic[arr[0]] = [[int(arr[3]), int(arr[4]), gene_id, gene_name]]
+                else:
+                     self.dic[arr[0]].append([int(arr[3]), int(arr[4]), gene_id, gene_name])
+        if 'chr14' not in self.dic:
+            self.dic['chr14'] = []
+        self.dic['chr14'].append([105586337, 106879944,'IGH@', 'IGH@'])
+        self.dic['chr14'].append([21621804, 22552332,'TRA@', 'TRA@'])
+        if 'KI270846.1' not in self.dic:
+            self.dic['KI270846.1'] = []
+        self.dic['KI270846.1'].append([0, 1351393,'IGH@', 'IGH@'])
         for key, value in self.dic.items():
             value.sort()
             i = 0
             while i < len(value) - 1:
-                if value[i][1] >= value[i + 1][0]:
+                if value[i][1] >= value[i + 1][0] and (value[i][2] == value[i+1][2] or value[i][2] in ['IGH@','TRA@']):
                     if value[i][1] >= value[i + 1][1]:
                         del value[i + 1]
                     else:
@@ -35,23 +55,6 @@ class Gene_co():
                     continue
                 i += 1
         return
-
-    def Find_gene(self, chrome, start, end):
-        if chrome not in self.dic or chrome == 'chrM':
-            return ['', '', '', '', '']
-        chr_list = self.dic[chrome]
-        l, r, m = 0, len(chr_list), 0
-        while r - 1 > l:
-            m = (l + r) // 2
-            if chr_list[m][0] <= start:
-                l = m
-            else:
-                r = m
-        m = l
-        if chr_list[m][0] <= start and chr_list[m][1] >= end:
-            return [chr_list[m][2], chr_list[m][3], chrome, chr_list[m][0], chr_list[m][1]]
-        else:
-            return ['', '', '', '', '']
 
     def Find_exon(self, chrome, start, end):
         if chrome not in self.dic or chrome == 'chrM':
@@ -65,9 +68,19 @@ class Gene_co():
             else:
                 r = m
         m = l
-        if chr_list[m][0] <= start and chr_list[m][1] >= end:
+        if chr_list[m][0] -10 <= start and chr_list[m][1] + 10 >= end :
             return [chr_list[m][2], chr_list[m][3], chrome, chr_list[m][0], chr_list[m][1]],m
         else:
+            m_new = m - 1
+            while m_new >= 0 and chr_list[m_new][0] - 10 <= start and chr_list[m_new][1] + 10 >= end:
+                if chr_list[m_new][1] + 10 >= end:
+                    return [chr_list[m_new][2], chr_list[m_new][3], chrome, chr_list[m_new][0], chr_list[m_new][1]],m_new
+                m_new -= 1
+            m_new = m + 1
+            while m_new < len(chr_list) and chr_list[m_new][0] - 10 <= start:
+                if chr_list[m_new][1] + 10 >= end:
+                    return [chr_list[m_new][2], chr_list[m_new][3], chrome, chr_list[m_new][0], chr_list[m_new][1]],m_new
+                m_new += 1
             return ['', '', '', '', ''],-1
 
 def reverse(seq):
@@ -134,13 +147,13 @@ def find_positions(gene_co,chrom,pos,length,gene_now,dir):
     return poses
 
 ann_file = './data/gencode.v19.chr_patch_hapl_scaff.annotation.gtf'
-reference_fast_file = './data/hg19.fa'
+reference_fast_file = '../data/hg19.fa'
 gene_co = Gene_co()
 gene_co.Build_dic(ann_file)
-input_file = './data/positive/gene.fusions.V1.tsv'
-output_file = './data/positive/positive_seq.txt'
-tmp_bed = './data/positive/tmp.bed'
-tmp_fasta = './data/positive/tmp.fasta'
+input_file = '../data/positive/gene.fusions.V1.tsv'
+output_file = '../data/positive/positive_seq.txt'
+tmp_bed = '../data/positive/tmp.bed'
+tmp_fasta = '../data/positive/tmp.fasta'
 O = open(output_file,'w')
 
 T_B = open(tmp_bed,'w')
