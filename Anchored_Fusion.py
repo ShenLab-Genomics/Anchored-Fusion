@@ -3,7 +3,7 @@ import sys
 import os
 import re
 from Model import Train_model, Test_model
-from utils import Gene_co, Find_homo_genes, Find_blocks,del_too_many_reads,contact_reads, Build_candidate_fasta, Find_Anchored_split,  Find_candidate_genes, Final_fusion,Find_fine_block, make_negative_file, get_test_reads
+from functions import Gene_co, Find_homo_genes, Find_blocks,del_too_many_reads,contact_reads, Build_candidate_fasta, Find_Anchored_split,  Find_candidate_genes, Final_fusion,Find_fine_block, make_negative_file, get_test_reads
 import numpy
 
 lastd = sys.argv[0].rfind('/')
@@ -23,9 +23,9 @@ parser.add_argument('--file_ref_seq', type=str, required=True, default='', help=
 parser.add_argument('--file_ref_ann', type=str, required=True, default='', help='The reference annotation file')
 parser.add_argument('--not_filter_false_positive', action='store_true', help='When this parameter is added, possible artificial segments are not filtered out.')
 parser.add_argument('--not_train_filter_model', action='store_true', help='When this parameter is added, the filtering model is not trained based on input data, and a pre-trained model file must be provided.')
-parser.add_argument('--model_file', type=str, default='./model.pt', help='The model file for training model as negative samples')
-parser.add_argument('--positive_samples', type=str, default='./positive_samples.txt', help='The fusion genes file for training model as positive samples')
-parser.add_argument('--homo_gene_file', type=str, default='./homo_gene.npy', help='The homo genes file for training model. If you want to train a filtering model from the input data, you must include that file.')
+parser.add_argument('--model_file', type=str, default='./data/model.pt', help='The model file for training model as negative samples')
+parser.add_argument('--positive_samples', type=str, default='./data/positive_samples.txt', help='The fusion genes file for training model as positive samples')
+parser.add_argument('--homo_gene_file', type=str, default='./data/homo_gene.npy', help='The homo genes file for training model. If you want to train a filtering model from the input data, you must include that file.')
 parser.add_argument('--negative_samples', type=str, default='./Model/negative_samples.txt', help='The fusion genes file for training model as negative samples')
 parser.add_argument('--thread', type=str, default='1', help='The threads number you want use.')
 parser.add_argument('--gpu_number', type=str, default='-1', help='The gpu number you want use.')
@@ -35,10 +35,10 @@ args = parser.parse_args()
 script_folder = os.path.dirname(os.path.abspath(__file__))
 if not os.path.exists(args.positive_samples):
     args.positive_samples = script_folder+'/data/positive_samples.txt'
-if not not_filter_false_positive:
-    if not os.path.exists(args.homo_genes):
-        args.homo_genes = script_folder+'/data/homo_gene.npy'
-        if not os.path.exists(args.homo_genes):
+if not args.not_filter_false_positive:
+    if not os.path.exists(args.homo_gene_file):
+        args.homo_gene_file = script_folder+'/data/homo_gene.npy'
+        if not os.path.exists(args.homo_gene_file):
             if os.path.exists(script_folder+'/data/homo_gene_1.txt.gz') and os.path.exists(script_folder+'/data/homo_gene_1.txt.gz'):
                 os.system('gzip -d '+ script_folder+'/data/homo_gene_1.txt.gz')
                 os.system('gzip -d '+ script_folder+'/data/homo_gene_2.txt.gz')
@@ -46,7 +46,7 @@ if not not_filter_false_positive:
                 os.system('cat '+script_folder+'/data/homo_gene_1.txt '+script_folder+'/data/homo_gene_2.txt > '+script_folder+'/data/homo_gene.txt')
             if os.path.exists(script_folder+'/data/homo_gene.txt'):
                 homo_genes = {}
-                F = open(script_folder+'/data/homo_gene.txt','r'):
+                F = open(script_folder+'/data/homo_gene.txt','r')
                 gene_names = F.readlines()[0].split(';')
                 for line in F.readlines()[1:]:
                     key,values = line.rstrip().split('\t')
@@ -139,8 +139,9 @@ blocks_chr = Find_fine_block(file_anchored_reads_filter,args.file_ref_seq,out_di
 Build_candidate_fasta(file_candidate_seq, out_dir_name, args.file_ref_seq, file_anchored_seq, blocks_chr)
 breakpoints = contact_reads(file_anchored_reads_filter, out_dir_name, args.file_ref_seq,args.thread)
 breakpoint_good_ids = Find_Anchored_split(out_dir_name, file_candidate_seq, blocks_chr, breakpoints,gene_co,file_anchored_seq)
-candidates_new = Find_candidate_genes(out_dir_name,  args.file_ref_seq, breakpoint_good_ids, breakpoints, blocks_chr,  gene_co, args.thread)
+candidates_new, cnt_max = Find_candidate_genes(out_dir_name,  args.file_ref_seq, breakpoint_good_ids, breakpoints, blocks_chr,  gene_co, args.thread)
 model_out_name = temp_model_folder + args.out_name
+scores = []
 if not args.not_filter_false_positive and len(candidates_new) != 0:
    if args.not_train_filter_model:
       if not os.path.exists(args.model_file):
@@ -151,10 +152,10 @@ if not args.not_filter_false_positive and len(candidates_new) != 0:
         with open(model_file, 'r') as file:
             import torch
             state_dict = torch.load(model_file)
-            len_seq = state_dict['classify1.classify.fc1.weight'].shape[1]*3//64-1
             test_file = model_out_name + '_test_reads.txt'
-            get_test_reads(test_file,candidates_new,len_seq)
-            scores = Test_model(test_file, model_file,gpu_number)
+            get_test_reads(model_out_name,test_file,candidates_new, file_anchored_seq,args.file_ref_seq,gene_co )
+            scores = Test_model(test_file, model_file,args.gpu_number)
+            print(scores)
             for i,candidate_new in enumerate(candidates_new):
                 candidate_new.score = scores[i]
       except FileNotFoundError:
@@ -167,44 +168,40 @@ if not args.not_filter_false_positive and len(candidates_new) != 0:
                 if not os.path.exists(args.negative_samples):
                     negative_samples = model_out_name + '_negative_samples.txt'
                     file_unmapped_reads = model_out_name + '_unmapped_reads.bam'
-                    if not os.path.exists(negative_samples):
-                        try:
-                            with open(args.homo_gene_file,'r') as file:
-                               if not os.path.exists(file_unmapped_reads):
-                                    os.system("bwa mem -M -t " + args.thread + " " + args.file_ref_seq + " " + args.fastq1 + " " + args.fastq2 + " | samtools view -bSu - -o " + file_unmapped_reads)
-                               make_negative_file(model_out_name, negative_samples, file_unmapped_reads, gene_co, args.file_ref_seq, args.homo_gene_file, args.thread, args.gene_name)
-                               if not os.path.exists(args.model_file):
-                                    model_file = model_out_name+'_model.pt'
-                               else:
-                                    model_file =  args.model_file
-                               len_seq = Train_model(model_out_name, args.positive_samples,negative_samples,model_file,gpu_number)
-                               test_file = model_out_name + '_test_reads.txt'
-                               get_test_reads(test_file,candidates_new,len_seq)
-                               scores = Test_model(test_file, args.model_file, args.gpu_number)
-                               for i,candidate_new in enumerate(candidates_new):
-                                    candidate_new.score = scores[i]
-                        except FileNotFoundError:
-                            print("Error: homo genes file not found!, not performing filter false positives.")
-                            args.not_filter_false_positive = True
-                            pass
+                    try:
+                        with open(args.homo_gene_file,'r') as file:
+                           if not os.path.exists(negative_samples):
+                              if not os.path.exists(file_unmapped_reads):
+                                os.system("bwa mem -M -t " + args.thread + " " + args.file_ref_seq + " " + args.fastq1 + " " + args.fastq2 + " | samtools view -bSu - -o " + file_unmapped_reads)
+                              make_negative_file(model_out_name, args.file_ref_seq, file_unmapped_reads ,negative_samples, gene_co, args.homo_gene_file, args.thread, args.gene_name)
+                           if not os.path.exists(args.model_file):
+                                model_file = model_out_name+'_model.pt'
+                           else:
+                                model_file =  args.model_file
+                           Train_model(model_out_name, args.positive_samples,negative_samples,model_file,gpu_number)
+                           test_file = model_out_name + '_test_reads.txt'
+                           get_test_reads(model_out_name,test_file,candidates_new, file_anchored_seq,args.file_ref_seq,gene_co)
+                           scores = Test_model(test_file, model_file, args.gpu_number)
+                    except FileNotFoundError:
+                        print("Error: homo genes file not found!, not performing filter false positives.")
+                        args.not_filter_false_positive = True
+                        pass
                 else:
                     negative_samples = args.negative_samples
-                    len_seq = Train_model(model_out_name, args.positive_samples,negative_samples,args.model_file,gpu_number)
                     if not os.path.exists(args.model_file):
                         model_file = model_out_name+'_model.pt'
                     else:
                         model_file =  args.model_file
+                    Train_model(model_out_name, args.positive_samples,negative_samples,model_file,gpu_number)
                     test_file = model_out_name + '_test_reads.txt'
-                    get_test_reads(test_file,candidates_new,len_seq)
-                    scores = Test_model(test_file, args.model_file,gpu_number)
-                    for i,candidate_new in enumerate(candidates_new):
-                       candidate_new.score = scores[i]
+                    get_test_reads(model_out_name,test_file,candidates_new,file_anchored_seq,args.file_ref_seq,gene_co)
+                    scores = Test_model(test_file, model_file,gpu_number)
         except FileNotFoundError:
             args.not_filter_false_positive = True
             print("Error: positive samples file not found!, not performing filter false positives.")
             pass
 
 
-Final_fusion(out_dir_name_out, candidates_new, args.gene_name, gene_co, args.not_filter_false_positive )
+Final_fusion(out_dir_name_out, candidates_new, args.gene_name, gene_co, scores,cnt_max,args.not_filter_false_positive)
 
 exit()
