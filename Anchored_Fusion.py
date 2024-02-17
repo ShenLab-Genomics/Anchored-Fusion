@@ -85,6 +85,8 @@ model_out_name = args.out_folder+'/model_dir/'
 if not os.path.exists(model_out_name):
    os.system('mkdir ' + model_out_name)
 
+gene_co = Gene_co()
+gene_co.Build_dic(args.file_ref_ann)
 if not args.not_filter_false_positive and not args.not_train_filter_model:
     try:
         with open(args.positive_samples, 'r') as file:
@@ -191,8 +193,6 @@ for gene_name in gene_names:
     if not os.path.exists(file_anchored_reads):
         os.system("samtools view -u -F 772 -h " + file_realigned + " |  samtools sort -@ " + args.thread + " - -o " + file_anchored_reads)
 
-    gene_co = Gene_co()
-    gene_co.Build_dic(args.file_ref_ann)
     if not os.path.exists(file_bad_genes):
         Find_homo_genes(args.file_ref_seq, file_anchored_seq, args.file_ref_ann, out_dir_name, file_bad_genes)
     homo_genes = []
