@@ -1581,7 +1581,7 @@ def make_negative_file(output_dir, file_ref_seq, f_read, output_file, gene_co, h
     tmp_fasta = output_dir+'_negative_samples.fasta'
     prepare_negative(output_dir,  f_read, gene_co, file_ref_seq, homo_genes, thread, gene_names, tmp_bed)
     os.system('bedtools getfasta -s -nameOnly -fi '+file_ref_seq+' -bed '+tmp_bed+' -fo '+tmp_fasta)
-    O = open(output_file,'w')
+    O = open(output_file,'a+')
     T_F = open(tmp_fasta,'r')
     flag = 2
     last_name = ''
