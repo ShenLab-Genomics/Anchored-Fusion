@@ -1744,8 +1744,8 @@ def Final_fusion(out_dir_name_now,  candidates_new, gene_name, gene_co, score, c
                 other_breakpoint)
         return fusion_gene
 
-    file_abridged_output = out_dir_name_now + '_new_fusion_predictions_abridged.txt'
-    file_output = out_dir_name_now + '_new_fusion_predictions.txt'
+    file_abridged_output = out_dir_name_now + '_predictions_abridged.txt'
+    file_output = out_dir_name_now + '_predictions.txt'
     FA = open(file_abridged_output, 'w')
     FO = open(file_output, 'w')
     if not_fiter:
