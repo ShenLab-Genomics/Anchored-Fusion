@@ -1750,10 +1750,10 @@ def Final_fusion(out_dir_name_now,  candidates_new, gene_name, gene_co, score, c
     FO = open(file_output, 'w')
     if not_fiter:
         FA.write("Fusion_gene" + "\t" + "Anchored_gene_X" + "\t" + "X_clip_location" + "\t" + "Partner_gene_Y" + "\t" + "Y_clip_location" + "\t" + "Spanning_read_count" + "\t" + "Breakpoint_read_count" + "\n")
-        FO.write("Fusion_gene" + "\t" + "Anchored_gene_X" + "\t" + "X_clip_location" + "\t" + "Partner_gene_Y" + "\t" +  "Y_clip_location" + "\t" + "Spanning_read_count" + "\t" + "Breakpoint_read_count" + "\t" + "Spanning_reads" + "\t" + "Breakpoint_reads" + "\t" + "Breakpoint_site_reads_1" + '\t' + 'Breakpoint_site_reads_2' + '\t' + 'Homo_genes'+"\tLeft_sequence\tMiddle_sequence\tRight_sequence"+'\n')
+        FO.write("Fusion_gene" + "\t" + "Anchored_gene_X" + "\t" + "X_clip_location" + "\t" + "Partner_gene_Y" + "\t" +  "Y_clip_location" + "\t" + "Spanning_read_count" + "\t" + "Breakpoint_read_count" + "\t" + "Spanning_reads" + "\t" + "Breakpoint_reads" + "\t" + "Breakpoint_site_reads_1" + '\t' + 'Breakpoint_site_reads_2' + '\t' + 'Homo_genes\n')
     else:
         FA.write("Fusion_gene" + "\t" + "Anchored_gene_X" + "\t" + "X_clip_location" + "\t" + "Partner_gene_Y" + "\t" + "Y_clip_location" + "\t"+"Natural_score"+"\t" + "Spanning_read_count" + "\t" + "Breakpoint_read_count" + "\n")
-        FO.write("Fusion_gene" + "\t" + "Anchored_gene_X" + "\t" + "X_clip_location" + "\t" + "Partner_gene_Y" + "\t" +  "Y_clip_location" + "\t"+"Natural_score"+"\t" + "Spanning_read_count" + "\t" + "Breakpoint_read_count" + "\t" + "Spanning_reads" + "\t" + "Breakpoint_reads" + "\t" + "Breakpoint_site_reads_1" + '\t' + 'Breakpoint_site_reads_2' + '\t' + 'Homo_genes'+"\tLeft_sequence\tMiddle_sequence\tRight_sequence"+'\n')
+        FO.write("Fusion_gene" + "\t" + "Anchored_gene_X" + "\t" + "X_clip_location" + "\t" + "Partner_gene_Y" + "\t" +  "Y_clip_location" + "\t"+"Natural_score"+"\t" + "Spanning_read_count" + "\t" + "Breakpoint_read_count" + "\t" + "Spanning_reads" + "\t" + "Breakpoint_reads" + "\t" + "Breakpoint_site_reads_1" + '\t' + 'Breakpoint_site_reads_2' + '\t' + 'Homo_genes\n')
     j = -1
     pos_and_mid = []
     for candidate_new in candidates_new:
