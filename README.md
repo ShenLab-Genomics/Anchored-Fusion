@@ -37,4 +37,4 @@ to clone this repository.
 （3）For Anchored-fusion, by default, we expect you to retrain a filter using the data we provide, for which you need to provide positive training samples and the homologous gene file. These files are included in the 'data' folder of our program, please do not delete them.
 
 ## run
-python Anchored_Fusion.py --file_anchored_cds=test/target_gene.fasta --gene_name=target_gene --fastq1=test/test_sample_1.fastq.gz  --fastq2=test/test_sample_1.fastq.gz --out_folder=output_dir --file_ref_seq=reference.genome.fa --file_ref_ann=genome.annotation.gtf
+python Anchored_Fusion.py --file_anchored_cds=test/target_gene.fasta --fastq1=test/test_sample_1.fastq.gz  --fastq2=test/test_sample_1.fastq.gz --out_folder=output_dir --file_ref_seq=reference.genome.fa --file_ref_ann=genome.annotation.gtf
