@@ -61,10 +61,11 @@ if not os.path.exists(args.gene_names) or args.gene_names == '':
     for line in F_target_fasta.readlines():
         if line.startswith('>'):
             arr = line.rstrip()[1:].split(' ')
-            for i in range(len(arr)):
+            i = 0
+            while i < len(arr):
                 if re.match(r'[a-zA-Z]+_\d+\.\d+',arr[i]):
                     del arr[i]
-                elif re.search(r'gene', arr[i], re.IGNORECASE) or re.search(r'specie', arr[i], re.IGNORECASE) or (r'trans', arr[i], re.IGNORECASE) or (r'for', arr[i], re.IGNORECASE) or (r'homo', arr[i], re.IGNORECASE) or ((r'sapiens', arr[i], re.IGNORECASE)):
+                elif re.search(r'gene', arr[i], re.IGNORECASE) or re.search(r'specie', arr[i], re.IGNORECASE) or re.search(r'trans', arr[i], re.IGNORECASE) or re.search(r'for', arr[i], re.IGNORECASE) or re.search(r'homo', arr[i], re.IGNORECASE) or re.search(r'sapiens', arr[i], re.IGNORECASE):
                     del arr[i]
                 else:
                     i += 1
@@ -80,7 +81,7 @@ else:
 
 if not os.path.exists(args.out_folder):
    os.system('mkdir ' + args.out_folder)
-model_out_name = args.out_folder+'/model/'
+model_out_name = args.out_folder+'/model_dir/'
 if not os.path.exists(model_out_name):
    os.system('mkdir ' + model_out_name)
 
@@ -111,15 +112,20 @@ if not args.not_filter_false_positive and not args.not_train_filter_model:
         args.not_filter_false_positive = True
         print("Error: positive samples file not found!, not performing filter false positives.")
         pass
+elif not args.not_filter_false_positive and args.not_train_filter_model:
+    if not os.path.exists(args.model_file):
+        model_file = model_out_name+'/model.pt'
+    else:
+        model_file = args.model_file
 
 FAC = open(args.file_anchored_cds, 'r')
 fasta_lines = FAC.readlines()
 line_num = 1
 for gene_name in gene_names:
-    out_name = args.gene_name
+    out_name = gene_name + '_fusion'
     temp_folder = args.out_folder + '/' + out_name
-    temp_work_folder = args.out_folder+ "/work_dir/"
-    temp_model_folder = args.out_folder + "/model_dir/"
+    temp_work_folder = temp_folder+ "/work_dir/"
+    temp_model_folder = temp_folder + "/model_dir/"
     out_dir_name = temp_work_folder + out_name
     out_dir_name_out = temp_folder +'/' + out_name
     gpu_number =args.gpu_number
@@ -140,12 +146,12 @@ for gene_name in gene_names:
     negative_samples = out_dir_name + '_negative_samples.txt'
     file_bad_genes = out_dir_name + '_homo_genes.bed'
     file_candidate_seq = out_dir_name + "_candidate_gene_sequence.fa"
-    file_predictions_abridged = out_dir_name_out + "_fusion_predictions_abridged.txt"
-    file_predictions = out_dir_name_out + "_fusion_predictions.txt"
+    file_predictions_abridged = out_dir_name_out + "_predictions_abridged.txt"
+    file_predictions = out_dir_name_out + "_predictions.txt"
 
     FAS = open(file_anchored_seq, 'w')
     FAS.write(">" + gene_name + "\n")
-    while line_num < len(FAC):
+    while line_num < len(fasta_lines):
         if fasta_lines[line_num].startswith('>'):
             break
         else:
@@ -153,7 +159,7 @@ for gene_name in gene_names:
         line_num += 1
     FAS.close()
     line_num += 1
-    if line_num >= len(FAC)
+    if line_num >= len(fasta_lines):
         FAC.close()
 
     if os.path.exists(file_anchored_seq + ".bwt") and os.path.exists(file_anchored_seq + ".pac") and os.path.exists(
@@ -201,7 +207,7 @@ for gene_name in gene_names:
     breakpoints = contact_reads(file_anchored_reads_filter, out_dir_name, args.file_ref_seq,args.thread)
     breakpoint_good_ids = Find_Anchored_split(out_dir_name, file_candidate_seq, blocks_chr, breakpoints,gene_co,file_anchored_seq)
     candidates_new, cnt_max = Find_candidate_genes(out_dir_name,  args.file_ref_seq, breakpoint_good_ids, breakpoints, blocks_chr,  gene_co, args.thread)
-    model_out_name = temp_model_folder + args.out_name
+    model_out_name = temp_model_folder + out_name
     scores = []
     if not args.not_filter_false_positive and len(candidates_new) != 0:
       try:
@@ -214,7 +220,7 @@ for gene_name in gene_names:
             for i,candidate_new in enumerate(candidates_new):
                 candidate_new.score = scores[i]
       except FileNotFoundError:
-        args.not_filter_false_positive
+        args.not_filter_false_positive = True
         print("Error: model file not found!, not performing filter false positives.")
         pass
 
