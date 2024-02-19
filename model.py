@@ -93,7 +93,7 @@ class TransformerEncoder(nn.Module):
         self.input_embedding = nn.Linear(input_dim,hidden_dim)
         self.position_encoding = nn.Embedding(len_seq, hidden_dim)
         nn.init.normal_(self.position_encoding.weight, std=0.02)
-        encoder_layer = nn.TransformerEncoderLayer(hidden_dim, num_heads,dropout=0.0)
+        encoder_layer = nn.TransformerEncoderLayer(hidden_dim, num_heads,dropout=0.0,batch_first=True)
         self.transformer_encoder = nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
         self.relu = nn.ReLU()
 
@@ -102,9 +102,9 @@ class TransformerEncoder(nn.Module):
         positions = torch.arange(self.len_seq, device=X.device).unsqueeze(0)
         position_encoding = self.position_encoding(positions)
         X = X + position_encoding
-        X = X.transpose(0, 1)
+        #X = X.transpose(0, 1)
         X = self.relu(self.transformer_encoder(X))
-        X = X.transpose(0, 1)
+        #X = X.transpose(0, 1)
         return X
 
 class Model(nn.Module):
@@ -154,16 +154,12 @@ def make_train_file(positive_file,negative_file,negative_file_tra,negative_file_
     l_p_seq = len(lines_p[0].split('\t')[0])//2
     O3 = open(positive_file_tra,'w')
     for i in list_positive[:int(0.7*l)]:
-        t = random.randint(int(0.2*l_seq),int(0.8*l_seq))
         seq,fusion_gene = lines_p[i].split('\t')
-        seq = seq[l_p_seq - t:l_p_seq+l_seq-t]
         O3.write(seq+'\t'+fusion_gene)
     O3.close()
     O4 = open(positive_file_tes,'w')
     for i in list_positive[int(0.7*l):l]:
-        t = random.randint(int(0.2*l_seq),int(0.8*l_seq))
         seq,fusion_gene = lines_p[i].split('\t')
-        seq = seq[l_p_seq - t:l_p_seq+l_seq-t]
         O4.write(seq+'\t'+fusion_gene)
     O4.close()
     Fn.close()
@@ -172,14 +168,14 @@ def make_train_file(positive_file,negative_file,negative_file_tra,negative_file_
 
 
 def read_lines(file_name):
-    turn_dic = {'A':0,'T':1,'G':2,'C':3,'H':4}
+    turn_dic = {'A':0,'T':1,'G':2,'C':3,'H':4,'D':5}
     F=open(file_name,"r")
     seqs = list()
     seqs_ori = list()
     for line in F.readlines():
         arr=line.split("\t")
         seq =arr[0].upper().replace('\n','')
-        s = np.zeros((len(seq),5))
+        s = np.zeros((len(seq),6))
         seqs_ori.append(seq)
         i = 0
         while i < len(seq):
@@ -263,10 +259,10 @@ def Train_model(model_out_name, positive_samples,negative_samples, model_file,gp
     np.random.seed(0)
     torch.manual_seed(0)
     torch.cuda.manual_seed_all(0)
-    negative_file_tra = model_out_name + '_negative_tra_seq.txt'
-    negative_file_tes = model_out_name + '_negative_tes_seq.txt'
-    positive_file_tra = model_out_name + '_positive_tra_seq.txt'
-    positive_file_tes = model_out_name + '_positive_tes_seq.txt'
+    negative_file_tra = model_out_name + 'negative_tra_seq.txt'
+    negative_file_tes = model_out_name + 'negative_tes_seq.txt'
+    positive_file_tra = model_out_name + 'positive_tra_seq.txt'
+    positive_file_tes = model_out_name + 'positive_tes_seq.txt'
     make_train_file(positive_samples,negative_samples,negative_file_tra,negative_file_tes,positive_file_tra,positive_file_tes)
     X_n_tra = read_lines(negative_file_tra)
     X_n_tes = read_lines(negative_file_tes)
@@ -290,7 +286,7 @@ def Train_model(model_out_name, positive_samples,negative_samples, model_file,gp
     num_epochs = 30
     loss = Loss(0.5,0.5)
     len_seq = X_n_tra.shape[1]
-    input_dim = 5
+    input_dim = 6
     block_dim = 256
     embed_dim = 256
     class_dim = 256
@@ -319,7 +315,7 @@ def Test_model(test_file, model_file,gpu_number):
     device = try_gpu(gpu_number)
     X = read_lines(test_file)
     len_seq = X.shape[1]
-    input_dim = 5
+    input_dim = 6
     block_dim = 256
     embed_dim = 256
     class_dim = 256
@@ -335,3 +331,4 @@ def Test_model(test_file, model_file,gpu_number):
     net = net.to(device).double()
     scores = test(net,X,device)
     return scores
+
