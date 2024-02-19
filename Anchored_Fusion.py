@@ -87,6 +87,7 @@ if not os.path.exists(model_out_name):
 
 gene_co = Gene_co()
 gene_co.Build_dic(args.file_ref_ann)
+gpu_number =args.gpu_number
 if not args.not_filter_false_positive and not args.not_train_filter_model:
     try:
         with open(args.positive_samples, 'r') as file:
@@ -100,7 +101,6 @@ if not args.not_filter_false_positive and not args.not_train_filter_model:
                         if not os.path.exists(file_unmapped_reads):
                             os.system("bwa mem -M -t " + args.thread + " " + args.file_ref_seq + " " + args.fastq1 + " " + args.fastq2 + " | samtools view -bSu - -o " + file_unmapped_reads)
                         make_negative_file(model_out_name, args.file_ref_seq, file_unmapped_reads ,negative_samples, gene_co, args.homo_gene_file, args.thread, gene_names)
-                        Train_model(model_out_name, args.positive_samples,negative_samples,model_file,gpu_number)
                 except FileNotFoundError:
                     print("Error: homo genes file not found!, not performing filter false positives.")
                     args.not_filter_false_positive = True
