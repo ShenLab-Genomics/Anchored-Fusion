@@ -1415,8 +1415,8 @@ def prepare_negative(out_dir_name_now,  f_read, gene_co, file_ref_seq, homo_gene
         gene_name = gene_name.upper()
         gene_names_now.append(gene_name)
     gene_names = gene_names_now
-    file1 = out_dir_name_now+'_negative_all_seq2.txt'
-    file2 = out_dir_name_now+'_negative_all_seq.psl'
+    file1 = out_dir_name_now+'negative_all_seq2.txt'
+    file2 = out_dir_name_now+'negative_all_seq.psl'
     last_genes = set()
     X_last = ''
     Y_last = []
@@ -1577,8 +1577,8 @@ def prepare_negative(out_dir_name_now,  f_read, gene_co, file_ref_seq, homo_gene
     return
 
 def make_negative_file(output_dir, file_ref_seq, f_read, output_file, gene_co, homo_genes, thread, gene_names):
-    tmp_bed = output_dir+'_negative_samples.bed'
-    tmp_fasta = output_dir+'_negative_samples.fasta'
+    tmp_bed = output_dir+'negative_samples.bed'
+    tmp_fasta = output_dir+'negative_samples.fasta'
     prepare_negative(output_dir,  f_read, gene_co, file_ref_seq, homo_genes, thread, gene_names, tmp_bed)
     os.system('bedtools getfasta -s -nameOnly -fi '+file_ref_seq+' -bed '+tmp_bed+' -fo '+tmp_fasta)
     O = open(output_file,'a+')
