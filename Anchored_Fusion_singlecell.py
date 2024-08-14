@@ -4,7 +4,7 @@ import os
 import re
 from Model import Train_model, Test_model
 from functions import Gene_co, Find_homo_genes, Find_blocks,del_too_many_reads,contact_reads, Build_candidate_fasta, Find_Anchored_split,  Find_candidate_genes, Final_fusion,Find_fine_block, make_negative_file, get_test_reads
-import numpy
+import numpy as np
 
 lastd = sys.argv[0].rfind('/')
 if lastd == -1:
