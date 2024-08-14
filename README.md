@@ -25,6 +25,7 @@ to clone this repository.
 - numpy
 - pytorch>=1.10.2
 - Biopython>=1.79
+- scikit-learn>=1.3
 
 ## Genome reference and annotation
 
