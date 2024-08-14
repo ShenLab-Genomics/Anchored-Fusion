@@ -24,6 +24,7 @@ to clone this repository.
 - Python 3.8 or higher
 - numpy
 - pytorch>=1.10.2
+- Biopython>=1.79
 
 ## Genome reference and annotation
 
