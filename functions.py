@@ -1600,8 +1600,8 @@ def make_negative_file(output_dir, file_ref_seq, f_read, output_file, gene_co, h
                     if last_name != '':
                         if last_strand == '-':
                             seq_left2,seq_right2 = reverse(seq_right2),reverse(seq_left2)
-                            O.write('N'*(100-len(seq_left1))+seq_left1+'H'+seq_right2+'N'*(100-len(seq_right2))+'\t'+write_name+'\n')
-                            #O.write('N'*(100-len(seq_left1))+seq_left1+'H'+seq_right1+'N'*(100-len(seq_right1))+'D'+'N'*(100-len(seq_left2))+seq_left2+'H'+seq_right2+'N'*(100-len(seq_right2))+'\t'+write_name+'\n')
+                        O.write('N'*(100-len(seq_left1))+seq_left1+'H'+seq_right2+'N'*(100-len(seq_right2))+'\t'+write_name+'\n')
+                        #O.write('N'*(100-len(seq_left1))+seq_left1+'H'+seq_right1+'N'*(100-len(seq_right1))+'D'+'N'*(100-len(seq_left2))+seq_left2+'H'+seq_right2+'N'*(100-len(seq_right2))+'\t'+write_name+'\n')
                     flag = 1
                     seq_left1,seq_right1,seq_left2,seq_right2 = '','','',''
                     write_name=gene_name
